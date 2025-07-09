@@ -402,7 +402,7 @@ void icm_Abst::numeric_dobs_dp(bool forGA){
     int n = etas.size();
     dob_dp_both.resize(n);
     dob_dp_rightOnly.resize(n);
-    int lind, rind;
+    int lind, rind; // IG  how do these get initialized?
 	double h_mult = 0.0001;
    	h *= h_mult;
 
