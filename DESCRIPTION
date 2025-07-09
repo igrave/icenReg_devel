@@ -23,3 +23,6 @@ Description: Regression models for interval censored data. Currently supports
 License: LGPL (>= 2.0, < 3)
 Packaged: 2014-08-20 19:43:34 UTC; cliff
 RoxygenNote: 6.1.1
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
