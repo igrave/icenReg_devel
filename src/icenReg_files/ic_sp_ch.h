@@ -35,13 +35,16 @@ public:
 
 class icm_Abst{
 public:
-    void update_p_ob(int i);    //done, not checked
+    void update_p_ob(int s, int i);    //done, not checked
     
-    double sum_llk();           //done, not checked
+    
+    double sum_llk_all(); //done, not checked
     // calculates the entire likelihood function.
     // Does not update eta or hazards!
-    
-    double par_llk(int ind);     //done, not checked
+    double sum_llk(int s);    // calculates likelihood for a single stratum
+
+
+    double par_llk(int s, int ind);     //done, not checked
     // only calculates partial likelihood based on an active index
     
     vector<vector<obInf>> obs_inf;
@@ -113,9 +116,9 @@ public:
     double numeric_p_der(int i);
     
     double dervConS_fromBaseS(double s, double eta);
-    void baseCH_2_baseS();
-    void baseS_2_baseP();
-    void baseP_2_baseS();
+    void baseCH_2_baseS(int s);
+    void baseS_2_baseP(int s);
+    void baseP_2_baseS(int s);
     void baseS_2_baseCH(int s);
     void calc_cond_S_derv();
     void calc_base_p_derv();
@@ -195,13 +198,15 @@ public:
     }
 	
 	void stablizeBCH(){
-		int k = baseCH.size();
-		double thisChange = baseCH[k-2] - 2.0;
-		intercept += thisChange;
-		for(int i = 1; i < (k-1); i++){
-			baseCH[i] -= thisChange;
-		}
-		update_etas();	
+        for(int s = 0; s < n_strata; s++){
+            int k = baseCH[s].size();
+		    double thisChange = baseCH[s][k-2] - 2.0;
+		    intercept[s] += thisChange;
+		    for(int i = 1; i < (k-1); i++){
+    			baseCH[s][i] -= thisChange;
+	    	} 
+        }
+        update_etas();
 	}
 	
 	

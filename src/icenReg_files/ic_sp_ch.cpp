@@ -11,49 +11,59 @@
 
 
 /*      LIKELIHOOD TOOLS        */
-void icm_Abst::update_p_ob(int i){
-    double chl = baseCH[ obs_inf[i].l ];
-    double chr = baseCH[ obs_inf[i].r +1 ];
-    double eta = etas[i];
-    obs_inf[i].pob = basHaz2CondS(chl, eta) - basHaz2CondS(chr, eta);
+void icm_Abst::update_p_ob(int s, int i){
+    double chl = baseCH[s][ obs_inf[s][i].l ];
+    double chr = baseCH[s][ obs_inf[s][i].r +1 ];
+    double eta = etas[s][i];
+    obs_inf[s][i].pob = basHaz2CondS(chl, eta) - basHaz2CondS(chr, eta);
 }
 
-double icm_Abst::sum_llk(){
-    int n = obs_inf.size();
+double icm_Abst::sum_llk(int s){
+    int n = obs_inf[s].size();
     double ans = 0;
     for(int i = 0; i < n; i++){
-        update_p_ob(i);
-        ans += log(obs_inf[i].pob) * w[i];
+        update_p_ob(s, i);
+        ans += log(obs_inf[s][i].pob) * w[s][i];
     }
     if(ISNAN(ans)) {ans = R_NegInf;}
     return(ans);
 }
 
-double icm_Abst::par_llk(int ind){
-    int num_l = node_inf[ind].l.size();
-    int num_r = node_inf[ind].r.size();
+double icm_Abst::sum_llk_all(){
+    double ans = 0;
+    for(int s = 0; s < n_strata; s++){
+        ans += sum_llk(s);
+    }
+    return(ans);
+}
+
+double icm_Abst::par_llk(int s, int ind){
+    int num_l = node_inf[s][ind].l.size();
+    int num_r = node_inf[s][ind].r.size();
     double ans = 0;
     int thisInd;
     for(int i = 0; i < num_l; i++){
-        thisInd = node_inf[ind].l[i];
-        update_p_ob(thisInd);
-        ans+= log(obs_inf[thisInd].pob) * w[thisInd];
+        thisInd = node_inf[s][ind].l[i];
+        update_p_ob(s, thisInd);
+        ans+= log(obs_inf[s][thisInd].pob) * w[s][thisInd];
     }
     for(int i = 0; i < num_r; i++){
-        thisInd = node_inf[ind].r[i];
-        update_p_ob(thisInd);
-        ans+= log(obs_inf[thisInd].pob) * w[thisInd];
+        thisInd = node_inf[s][ind].r[i];
+        update_p_ob(s, thisInd);
+        ans+= log(obs_inf[s][thisInd].pob) * w[s][thisInd];
     }
     if(ISNAN(ans)) ans = R_NegInf;
     return(ans);
 }
 
 void icm_Abst::update_etas(){
-    etas = covars * reg_par;
-    for(int i = 0; i < etas.size(); i++){
-		etas[i] += intercept;
-        expEtas[i] = exp(etas[i] );
-	}
+    for(int s = 0; s < n_strata; s++){
+        etas[s] = covars[s] * reg_par;
+        for(int i = 0; i < etas[s].size(); i++){
+		    etas[s][i] += intercept[s];
+            expEtas[s][i] = exp(etas[s][i] );
+	    }
+    }
 }
 
 
@@ -579,7 +589,7 @@ double icm_Abst::run(int maxIter, double tol, bool useGD, int baselineUpdates){
 	iter = 0;
 	bool metOnce = false;
 	double llk_old = R_NegInf;
-	double llk_new = sum_llk();
+	double llk_new = sum_llk_all(); // global log-likelihood
 
 	bool regNon0 = false;
 	int reg_k = reg_par.size();
