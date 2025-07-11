@@ -36,19 +36,19 @@ void icm_Abst::baseP_2_baseS(){
     baseS[k] = 0.0;
 }
 
-void icm_Abst::baseS_2_baseCH(){
-    int k = baseS.size();
-    baseCH.resize(k);
-    baseCH[0] = R_NegInf;
-    baseCH[k-1] = R_PosInf;
+void icm_Abst::baseS_2_baseCH(int s){
+    int k = baseS[s].size();
+    baseCH[s].resize(k);
+    baseCH[s][0] = R_NegInf;
+    baseCH[s][k-1] = R_PosInf;
     for(int i = 1; i < (k-1); i++){
-        baseCH[i] = log(-log(baseS[i]));
+        baseCH[s][i] = log(-log(baseS[s][i]));
     }
 }
 
 double icm_Abst::llk_from_p(){
     baseP_2_baseS();
-    baseS_2_baseCH();
+    baseS_2_baseCH(s);
     double ans = sum_llk();
     return(ans);
 }

@@ -257,11 +257,21 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   #   regStart <- solve(pca_info$rotation, (regStart * pca_info$scale) )
   # }
   
-  c_ans <- .Call('ic_sp_ch', mi_info$l_inds, mi_info$r_inds, 
-                 covars, fitType, as.numeric(weights), useGA, 
-                 as.integer(maxIter), as.integer(baselineUpdates),
-                 as.logical(useFullHess), as.logical(updateCovars),
-                 as.double(regStart))  
+  c_ans <- .Call(
+    'ic_sp_ch',
+    list(mi_info$l_inds), # list of left indices
+    list(mi_info$r_inds), # list of right indices 
+    list(covars), # list covariates of each strata
+    fitType,
+    list(as.numeric(weights)), # list of weights
+    1L, # number of strata
+    useGA, 
+    as.integer(maxIter),
+    as.integer(baselineUpdates),
+    as.logical(useFullHess),
+    as.logical(updateCovars),
+    as.double(regStart)
+  )  
   names(c_ans) <- c('p_hat', 'coefficients', 'llk', 'iterations', 'score')
   myFit <- new(callText)
   myFit$p_hat <- c_ans$p_hat
