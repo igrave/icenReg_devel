@@ -10,26 +10,27 @@ In setup_icm, we need to make the following changes to allow stratified hazards 
 
  Then loop over the n_strata and set up each strata.
  In the class definition, define the following to be vectors:
- - base_p_obs
- - etas
- - expEtas
- - w
- - covars
- - obs_inf
- - node_inf 
- - usedVec
+ -[x] base_p_obs
+ -[x] etas
+ -[x] expEtas
+ -[x] w
+ -[x] covars
+ -[x] obs_inf
+ -[x] node_inf 
+ -[x] usedVec
 
-- baseCH
-- backupCH
-- dob_dp_both
-- dob_dp_rightOnly
-- baseS
-- base_p_derv
-- h 
-- prop_p
+-[x] baseCH
+-[x] backupCH
+-[x] dob_dp_both
+-[x] dob_dp_rightOnly
+-[x] baseS
+-[x] base_p_derv
+~~-[x] h ~~
+-[x] prop_p
+-[x] intercept
 
 for outputs:
-- p_hat
+-[x] p_hat
 
 The block starting `icm_obj->reg_d1.resize(reg_k);` 
 can be moved out of the for loop over strata
@@ -61,7 +62,7 @@ These look pretty straightforward.
 
 - llk_from_p
 - baseP_2_baseS();
-- baseS_2_baseCH();
+-[x] baseS_2_baseCH();
 
 #### recenterBCH()
 cumhaz2p_hat()

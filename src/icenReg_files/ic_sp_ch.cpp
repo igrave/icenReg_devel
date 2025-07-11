@@ -57,6 +57,9 @@ void icm_Abst::update_etas(){
 }
 
 
+/* Recenter the baseline cumulative hazard after the optimisation is finished.
+   Executed once in ic_sp_ch() after run returns.
+   This could loop internally over strata */
 void icm_Abst::recenterBCH(){
 	int k = baseCH.size();
 	for(int i = 1; i < (k-1); i++){
@@ -84,79 +87,133 @@ void icm_Abst::icm_addPar(vector<double> &delta){
 
 
 /*      INITIALIZATION TOOLS    */
-void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, 
+void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
 				SEXP R_RegPars, icm_Abst* icm_obj){
     icm_obj->h = 0.0001;
     icm_obj->almost_inf = 1.0/icm_obj->h;
-    int n = LENGTH(Rlind);
-    if(n != LENGTH(Rrind)){Rprintf("length of Rlind and Rrind not equal\n"); return;}
-    icm_obj->base_p_obs.resize(n);
-    icm_obj->etas.resize(n);
-    icm_obj->expEtas.resize(n);
-    icm_obj->w.resize(n);
-    	
-	icm_obj->intercept = 0.0;
-	
-    for(int i = 0; i < n; i++){
-        icm_obj->etas[i]       = 0;
-        icm_obj->expEtas[i]    = 1;
-        icm_obj->base_p_obs[i] = 0;
-        icm_obj->w[i]          = REAL(R_w)[i];
-    }
+
     
-    copyRmatrix_intoEigen(RCovars, icm_obj->covars);
-    int reg_k = icm_obj->covars.cols();
-    if(reg_k == 0) icm_obj->hasCovars = false; else icm_obj->hasCovars = true;
-    if(reg_k > 0){
-        if(n != icm_obj->covars.rows()) {Rprintf("covar rows not equal to n!\n"); return;}
+    nS = INTEGER(R_strata);
+    icm_obj->n_strata = nS;
+
+    // check inputs consistent for # strata
+    if(Rf_length(Rlind) != Rf_length(Rrind)){
+        Rprintf("length of Rlind and Rrind not equal\n");
+        return;
     }
+    if(Rf_length(Rlind) != Rf_length(R_w)){
+        Rprintf("length of Rlind and R_w not equal\n");
+        return;
+    }
+    if(Rf_length(Rlind) != Rf_length(RCovars)){
+        Rprintf("length of Rlind and RCovars not equal\n");
+        return;
+    }
+
+    icm_obj->base_p_obs.resize(nS);
+    icm_obj->etas.resize(nS);
+    icm_obj->expEtas.resize(nS);
+    icm_obj->w.resize(nS);
+    icm_obj->intercept.resize(nS);
+    icm_obj->covars.resize(nS);
+
+    int reg_k;
+
+    for(int s = 0; s < icm_obj->n_strata; s++){
+        int n = Rf_length(VECTOR_ELT(Rlind, s));
+        if(n != Rf_length(VECTOR_ELT(Rrind, s)){Rprintf("length of Rlind and Rrind not equal\n"); return;}
+
+        icm_obj->base_p_obs[s].resize(n);
+        icm_obj->etas[s].resize(n);
+        icm_obj->expEtas[s].resize(n);
+        icm_obj->w[s].resize(n);
+
+        icm_obj->intercept[s] = 0.0;
+
+        for(int i = 0; i < n; i++){
+            icm_obj->etas[s][i]       = 0;
+            icm_obj->expEtas[s][i]    = 1;
+            icm_obj->base_p_obs[s][i] = 0;
+            icm_obj->w[s][i]          = REAL(VECTOR_ELT(R_w,s))[i];
+        }
+
+        copyRmatrix_intoEigen(VECTOR_ELT(RCovars, s), icm_obj->covars[s]);
+    
+        int reg_k_s = icm_obj->covars[s].cols();
+        if (s == 0) {
+            reg_k = reg_k_s;
+            if(reg_k == 0) icm_obj->hasCovars = false; else icm_obj->hasCovars = true;
+        } else {
+            if (reg_k != reg_k_s) {
+                Rprintf("Covariates have different number of columns across strata!\n");
+                return;
+            }
+        }
+        if(reg_k_s > 0){
+            if(n != icm_obj->covars[s].rows()) {Rprintf("covar rows not equal to n!\n"); return;}
+        }
+    }
+       
     icm_obj->reg_d1.resize(reg_k);
     icm_obj->reg_d2.resize(reg_k, reg_k);
     icm_obj->reg_par.resize(reg_k);
     double* regParPtr = REAL(R_RegPars);
     for(int i = 0; i < reg_k; i++){ icm_obj->reg_par[i] = regParPtr[i]; }
     
-    int maxInd = 0;
-    for(int i = 0; i < n; i++){
-        maxInd = max(maxInd, INTEGER(Rrind)[i]);
-    }
 
-    icm_obj->baseCH.resize(maxInd + 2);
-    for(int i = 0; i <= maxInd; i++){ icm_obj->baseCH[i] = R_NegInf; }
-    icm_obj->baseCH[maxInd+1] = R_PosInf;
-    icm_obj->baseS.resize(maxInd + 2);
-    icm_obj->baseS[0] = 1.0;
-    icm_obj->baseS[maxInd+1] = 0;
-    int this_l, this_r;
-    icm_obj->obs_inf.resize(n);
-    icm_obj->node_inf.resize(maxInd + 2);
-    
-    for(int i = 0; i < n; i++){
-        this_l = INTEGER(Rlind)[i];
-        this_r = INTEGER(Rrind)[i];
-        icm_obj->obs_inf[i].l = this_l;
-        icm_obj->obs_inf[i].r = this_r;
-        icm_obj->node_inf[this_l].l.push_back(i);
-        icm_obj->node_inf[this_r + 1].r.push_back(i);
+    icm_obj->baseCH.resize(nS);
+    icm_obj->baseS.resize(nS);
+    icm_obj->obs_inf.resize(nS);
+    icm_obj->node_inf.resize(nS);
+    icm_obj->usedVec.resize(nS);
+
+    for(int s = 0; s < icm_obj->n_strata; s++){
+
+        int maxInd = 0;
+        for(int i = 0; i < n; i++){
+            maxInd = max(maxInd, INTEGER(VECTOR_ELT(Rrind, s))[i]);
+        }
+
+        icm_obj->baseCH[s].resize(maxInd + 2);
+        for(int i = 0; i <= maxInd; i++){ icm_obj->baseCH[s][i] = R_NegInf; }
+        icm_obj->baseCH[s][maxInd+1] = R_PosInf;
+        icm_obj->baseS[s].resize(maxInd + 2);
+        icm_obj->baseS[s][0] = 1.0;
+        icm_obj->baseS[s][maxInd+1] = 0;
+        int this_l, this_r;
+
+        icm_obj->obs_inf[s].resize(n);
+        icm_obj->node_inf[s].resize(maxInd + 2);
+
+        for(int i = 0; i < n; i++){
+            this_l = INTEGER(VECTOR_ELT(Rlind, s))[i];
+            this_r = INTEGER(VECTOR_ELT(Rrind, s))[i];
+            icm_obj->obs_inf[s][i].l = this_l;
+            icm_obj->obs_inf[s][i].r = this_r;
+            icm_obj->node_inf[s][this_l].l.push_back(i);
+            icm_obj->node_inf[s][this_r + 1].r.push_back(i);
+        }
+
+        double stepSize = -1.0/(1.0 + icm_obj->baseS[s].size() );
+        double curVal = 1.0;
+
+        for(int i = 1; i < (maxInd+1); i++){
+        	curVal += stepSize;
+            icm_obj->baseS[s][i] = curVal;
+        }
+
+        icm_obj->baseS_2_baseCH(s);     //TURN OFF IF WANT TO SWICH TO CH START
+
+
+        icm_obj->usedVec[s].resize(n);
+        for(int i = 0; i < n; i++){icm_obj->usedVec[s][i] = false;}
     }
-    
-    double stepSize = -1.0/(1.0 + icm_obj->baseS.size() );
-    double curVal = 1.0;
-    
-    for(int i = 1; i < (maxInd+1); i++){
-    	curVal += stepSize;
-        icm_obj->baseS[i] = curVal;
-    }
-    
-    icm_obj->baseS_2_baseCH();     //TURN OFF IF WANT TO SWICH TO CH START
-    
+                
     icm_obj->startGD = false;
     icm_obj->failedGA_counts = 0;
     icm_obj->iter = 0;
     icm_obj->numBaselineIts = 5;
     
-    icm_obj->usedVec.resize(n);
-    for(int i = 0; i < n; i++){icm_obj->usedVec[i] = false;}
 }
 
 
@@ -439,7 +496,7 @@ void icm_Abst::covar_nr_step(){
 
 /*      CALLING ALGORITHM FROM R     */
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
- 			  SEXP R_w, SEXP R_use_GD, SEXP R_maxiter,
+ 			  SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
  			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
  			  SEXP R_initialRegVals){
     icm_Abst* optObj;
@@ -453,7 +510,7 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     }
     else { Rprintf("fit type not supported\n");return(R_NilValue);}
     optObj->updateCovars = LOGICAL(R_updateCovars)[0] == TRUE;
-    setup_icm(Rlind, Rrind, Rcovars, R_w, R_initialRegVals, optObj);
+    setup_icm(Rlind, Rrind, Rcovars, R_w, R_strata, R_initialRegVals, optObj);
     
     optObj->useFullHess = LOGICAL(R_useFullHess)[0] == TRUE;
     
@@ -464,7 +521,7 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     
     double llk_new = optObj->run(maxIter, tol, useGD, baselineUpdates);
     
-    vector<double> p_hat;
+    vector<vector<double>> p_hat; // IG changed to vector of vectors to handle multiple strata
 	
 	optObj->recenterBCH();
 	
