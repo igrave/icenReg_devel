@@ -769,6 +769,13 @@ checkWeights <- function(weights, yMat){
   return(weights)
 }
 
+checkStrata <- function(strata, yMat) {
+  if(is.null(strata)) return(factor(rep(1, nrow(yMat))))
+  if(length(strata) != nrow(yMat)) stop('strata must be same length as y')
+  if(any(is.na(strata))) stop('NAs not allowed in strata')
+  return(as.factor(strata))
+}
+
 checkMatrix <- function(x){
   testMat <- cbind(x, 1)
   invertResult <- try(diag(solve(t(testMat) %*% testMat )), silent = TRUE)
