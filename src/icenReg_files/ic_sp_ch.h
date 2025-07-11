@@ -50,9 +50,9 @@ public:
     vector<vector<obInf>> obs_inf;
     vector<vector<node_info>> node_inf;
     
-    void numericBaseDervsAllRaw(vector<double> &d1, vector<double> &d2);
+    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2);
     
-    void icm_addPar(vector<double> &delta);
+    void icm_addPar(int s, vector<double> &delta);
 
     void numericBaseDervsOne(int raw_ind, vector<double> &d);
     void numericBaseDervsAllAct(vector<double> &d1, vector<double> &d2);
@@ -63,6 +63,7 @@ public:
     void recenterBCH();
 	
     void icm_step();
+    void icm_step_s(int s);
     
     void numericRegDervs();
     void covar_nr_step();

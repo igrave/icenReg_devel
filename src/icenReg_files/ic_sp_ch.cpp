@@ -86,11 +86,11 @@ void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p){
 }
 
 
-void icm_Abst::icm_addPar(vector<double> &delta){
+void icm_Abst::icm_addPar(int s, vector<double> &delta){
     int p_k = delta.size();
-    int a_k = baseCH.size();
+    int a_k = baseCH[s].size();
     if( (p_k+2) != a_k){Rprintf("in icm_addPar, delta is not the same length as actIndex!\n");return;}
-    for(int i = 0; i < p_k; i++){ baseCH[i+1] += delta[i]; }
+    for(int i = 0; i < p_k; i++){ baseCH[s][i+1] += delta[i]; }
 }
 
 
@@ -229,33 +229,33 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
 
 
 /*      OPTIMIZATION TOOLS      */
-void icm_Abst::numericBaseDervsOne(int raw_ind, vector<double> &dvec){
+void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
     dvec.resize(2);
     dvec[0] = 0;
     dvec[1] = 0;
-    if(raw_ind <= 0 || raw_ind >= (baseCH.size()- 1)){Rprintf("warning: inappropriate choice of ind for numericBaseDervs ind = %d\n", raw_ind); return;}
+    if(raw_ind <= 0 || raw_ind >= (baseCH[s].size()- 1)){Rprintf("warning: inappropriate choice of ind for numericBaseDervs ind = %d\n", raw_ind); return;}
     
     h = h / 25.0;
     
-    baseCH[raw_ind] += h;
-    double llk_h = par_llk(raw_ind);
-    baseCH[raw_ind] -= 2*h;
-    double llk_l = par_llk(raw_ind);
-    baseCH[raw_ind] += h;
-    double llk_st = par_llk(raw_ind);
+    baseCH[s][raw_ind] += h;
+    double llk_h = par_llk(s, raw_ind);
+    baseCH[s][raw_ind] -= 2*h;
+    double llk_l = par_llk(s, raw_ind);
+    baseCH[s][raw_ind] += h;
+    double llk_st = par_llk(s, raw_ind);
     
     if(llk_l == R_NegInf){
     	llk_l = llk_st;
-    	baseCH[raw_ind] += h/2.0;
-    	llk_st = par_llk(raw_ind);
+    	baseCH[s][raw_ind] += h/2.0;
+    	llk_st = par_llk(s, raw_ind);
     	baseCH[raw_ind] -= h/2.0;
     }
     
     if(llk_h == R_NegInf){
     	llk_h = llk_st;
-    	baseCH[raw_ind] -= h/2.0;
-    	llk_st = par_llk(raw_ind);
-    	baseCH[raw_ind] += h/2.0;
+    	baseCH[s][raw_ind] -= h/2.0;
+    	llk_st = par_llk(s, raw_ind);
+    	baseCH[s][raw_ind] += h/2.0;
     }
     
     dvec[0] = (llk_h - llk_l)/(2.0*h);
@@ -264,12 +264,12 @@ void icm_Abst::numericBaseDervsOne(int raw_ind, vector<double> &dvec){
     if(dvec[1] == R_NegInf || ISNAN(dvec[1]) ){
         h = h/100.0;
         
-        baseCH[raw_ind] += h;
-        double llk_h = par_llk(raw_ind);
-        baseCH[raw_ind] -= 2*h;
-        double llk_l = par_llk(raw_ind);
-        baseCH[raw_ind] += h;
-        double llk_st = par_llk(raw_ind);
+        baseCH[s][raw_ind] += h;
+        double llk_h = par_llk(s, raw_ind);
+        baseCH[s][raw_ind] -= 2*h;
+        double llk_l = par_llk(s, raw_ind);
+        baseCH[s][raw_ind] += h;
+        double llk_st = par_llk(s, raw_ind);
         
         dvec[0] = (llk_h - llk_l)/(2.0*h);
         dvec[1] = (llk_h + llk_l - 2.0 * llk_st) / (h * h);
@@ -292,8 +292,8 @@ void icm_Abst::numericBaseDervsAllAct(vector<double> &d1, vector<double> &d2){
     }
 }
 
-void icm_Abst::numericBaseDervsAllRaw(vector<double> &d1, vector<double> &d2){
-    int k = baseCH.size() - 2;
+void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2){
+    int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
     vector<double> ind_dervs(2);
@@ -306,18 +306,26 @@ void icm_Abst::numericBaseDervsAllRaw(vector<double> &d1, vector<double> &d2){
 
  
 void icm_Abst::icm_step(){
-    backupCH = baseCH;
-    double llk_st = sum_llk();
-    
-    vector<double> d1;
-    vector<double> d2;
-    numericBaseDervsAllRaw(d1, d2);
-    int thisSize = d1.size();
-    for(int i = 0; i < thisSize; i ++){
-        if(d2[i] == R_NegInf){d2[i] = -almost_inf;}
-        if(ISNAN(d2[i]))    {
-        //	Rprintf("warning: d2 isnan! \n");
-        	baseCH = backupCH;
+    for(int s = 0; s < n_strata; s++){
+        icm_step_s(s);
+    }
+}
+
+void icm_Abst::icm_step_s(int s){
+        backupCH[s] = baseCH[s];
+        double llk_st = sum_llk(s);
+        
+        vector<double> d1;
+        vector<double> d2;
+        numericBaseDervsAllRaw(s, d1, d2);
+        
+        int thisSize = d1.size();
+
+        for(int i = 0; i < thisSize; i ++){
+            if(d2[i] == R_NegInf){d2[i] = -almost_inf;}
+            if(ISNAN(d2[i]))    {
+            //	Rprintf("warning: d2 isnan! \n");
+        	    baseCH[s] = backupCH[s];
         	return;
         }
         if(d2[i] >= 0) {
@@ -338,31 +346,32 @@ void icm_Abst::icm_step(){
     }
     vector<double> x(d1.size());
     int x_k = x.size();
-    int baseCH_k = baseCH.size();
+    int baseCH_k = baseCH[s].size();
     if(x_k != baseCH_k - 2){Rprintf("warning: x.size()! = actIndex.size()\n"); return;}
-    thisSize = baseCH.size() - 2;
-    for(int i = 0; i < thisSize; i++){x[i] = baseCH[i + 1];}
+    thisSize = baseCH[s].size() - 2;
+    for(int i = 0; i < thisSize; i++){x[i] = baseCH[s][i + 1];}
     vector<double> prop(d1.size());
-    
-    pavaForOptim(d1, d2, x, prop);
-    
-    icm_addPar(prop);
-    checkCH();        
 
-    double llk_new = sum_llk();
+    pavaForOptim(d1, d2, x, prop);
+
+    icm_addPar(s, prop);
+    checkCH(s);
+
+    double llk_new = sum_llk(s);
     mult_vec(-1.0, prop);
     int tries = 0;
     while(llk_st > llk_new && tries < 5){
         tries++;
         mult_vec(0.5, prop);
-        icm_addPar(prop);
-        checkCH();        
+        icm_addPar(s, prop);
+        checkCH(s);        
 
-        llk_new = sum_llk();
+        llk_new = sum_llk(s);
     }
+
     if(llk_new < llk_st){
-        baseCH = backupCH;
-        llk_new = sum_llk();
+        baseCH[s] = backupCH[s];
+        llk_new = sum_llk(s);
         
         int numNAs = 0;
         double sumAbsProp = 0;
@@ -375,15 +384,13 @@ void icm_Abst::icm_step(){
             }
         }
         mult_vec(0, prop);
-
     }
-    
     maxBaseChg = 0;
     for(int i = 0; i < thisSize; i++){
         maxBaseChg = max(maxBaseChg, abs(prop[i]) );
     }
-
 }
+
 
 void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
     int k = reg_par.size();
@@ -576,11 +583,11 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
 
 }
 
-void icm_Abst::checkCH(){
-	int k = baseCH.size();
+void icm_Abst::checkCH(int s){
+	int k = baseCH[s].size();
 	for(int i = 1; i < k; i++){
-		if(baseCH[i] < baseCH[i-1]){
-			baseCH[i] = baseCH[i-1]; 
+		if(baseCH[s][i] < baseCH[s][i-1]){
+			baseCH[s][i] = baseCH[s][i-1]; 
 		}
 	}
 }
