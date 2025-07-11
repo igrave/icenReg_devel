@@ -280,7 +280,7 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   myFit$iterations <- c_ans$iterations
   myFit$score <- c_ans$score
   myFit[['T_bull_Intervals']] <- rbind(mi_info[['mi_l']], mi_info[['mi_r']])
-  myFit$p_hat <- myFit$p_hat / sum(myFit$p_hat) 
+  myFit$p_hat <- lapply(myFit$p_hat, function(p) p / sum(p)) 
   # if(recenterCovars == TRUE){
   #   myFit$pca_coefs <- myFit$coefficients
   #   myFit$pca_info <- pca_info

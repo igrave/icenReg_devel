@@ -175,9 +175,19 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
     icm_obj->baseCH.resize(nS);
     icm_obj->backupCH.resize(nS);
     icm_obj->baseS.resize(nS);
+    icm_obj->baseP.resize(nS);
+    icm_obj->baseP_backup.resize(nS);
+    
     icm_obj->obs_inf.resize(nS);
     icm_obj->node_inf.resize(nS);
     icm_obj->usedVec.resize(nS);
+    icm_obj->dob_dp_both.resize(nS);
+    icm_obj->dob_dp_rightOnly.resize(nS);
+
+    icm_obj->base_p_2ndDerv.resize(nS);
+    icm_obj->base_p_derv.resize(nS);
+    icm_obj->base_p_derv2.resize(nS);
+    icm_obj->prop_p.resize(nS);
 
     for(int s = 0; s < nS; s++){
         int n = Rf_length(VECTOR_ELT(Rrind, s));
@@ -187,14 +197,12 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
         }
 
         icm_obj->baseCH[s].resize(maxInd + 2);
-        icm_obj->backupCH[s].resize(maxInd + 2);
+        
 
         for(int i = 0; i <= maxInd; i++){ 
             icm_obj->baseCH[s][i] = R_NegInf; 
-            icm_obj->backupCH[s][i] = R_NegInf; 
         }
         icm_obj->baseCH[s][maxInd+1] = R_PosInf;
-        icm_obj->backupCH[s][maxInd+1] = R_PosInf;
         icm_obj->baseS[s].resize(maxInd + 2);
         icm_obj->baseS[s][0] = 1.0;
         icm_obj->baseS[s][maxInd+1] = 0;
@@ -553,7 +561,7 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     double llk_new = optObj->run(maxIter, tol, useGD, baselineUpdates);
     
     vector<vector<double>> p_hat; // IG changed to vector of vectors to handle multiple strata
-	
+	p_hat.resize(optObj->n_strata);
 	optObj->recenterBCH();
 	
     for(int s = 0; s < optObj->n_strata; s++){
