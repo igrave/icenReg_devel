@@ -86,13 +86,19 @@
 #' 
 #' Anderson-Bergman, C. (preprint) Revisiting the iterative convex minorant algorithm for interval censored survival regression models
 #' @export
-ic_sp <- function(formula, data, model = 'ph', 
-                  weights = NULL, bs_samples = 0, useMCores = F, 
-                  B = c(0,1), 
-                  controls = makeCtrls_icsp() ){
+ic_sp <- function(
+  formula,
+  data,
+  model = 'ph', 
+  weights = NULL,
+  bs_samples = 0,
+  useMCores = F, 
+  B = c(0,1), 
+  controls = makeCtrls_icsp() 
+){
   recenterCovars = TRUE
   useFullHess = TRUE  
-
+  
   # Information about orginal call to function. Useful for expanding X in predict(fit, newdata)
   call_base = match.call(expand.dots = FALSE)
   call_info = readingCall(call_base)
@@ -104,14 +110,14 @@ ic_sp <- function(formula, data, model = 'ph',
   yMat <- reg_items$y
   x <- reg_items$x
   xNames = reg_items$xNames
-
+  
   if(length(xNames) == 0 & bs_samples > 0){
     cat('no covariates included, so bootstrapping is not useful. Setting bs_samples = 0')
     bs_samples = 0
   }
   # For semi-parametric model, need to handle case when l == u
   yMat <- adjustIntervals(B, yMat)
-
+  
   checkMatrix(x)
   
   if(model == 'ph')	callText = 'ic_ph'
@@ -128,16 +134,16 @@ ic_sp <- function(formula, data, model = 'ph',
   }
   
   other_info <- list(useGA = controls$useGA, maxIter = controls$maxIter, 
-                     baselineUpdates = controls$baseUpdates, 
-                     useFullHess = useFullHess, 
-                     updateCovars = controls$updateReg,
-                     recenterCovars = recenterCovars, 
-                     regStart = regStart)  
-
+    baselineUpdates = controls$baseUpdates, 
+    useFullHess = useFullHess, 
+    updateCovars = controls$updateReg,
+    recenterCovars = recenterCovars, 
+    regStart = regStart)  
+    
   # Recentering covariates
   covarOffset <- icColMeans(x)
   x <- t(t(x) - covarOffset)
-
+    
   fitInfo <- fit_ICPH(yMat, x, callText, weights, other_info)
   dataEnv <- list()
   dataEnv[['x']] <- as.matrix(x, nrow = nrow(yMat))
@@ -153,13 +159,12 @@ ic_sp <- function(formula, data, model = 'ph',
     bsMat <- foreach(i = seeds, .combine = 'rbind') %mydo%{
       set.seed(i)
       sampDataEnv <- bs_sampleData(dataEnv, weights)
-      ans <- getBS_coef(sampDataEnv, callText = callText,
-                        other_info = other_info)
+      ans <- getBS_coef(sampDataEnv, callText = callText, other_info = other_info)
       rm(sampDataEnv)
       return(ans)
     }
   }
-  
+      
   if(bs_samples > 0){
     names(fitInfo$coefficients) <- xNames
     colnames(bsMat) <- xNames
@@ -168,17 +173,17 @@ ic_sp <- function(formula, data, model = 'ph',
     if(numNA > 0){
       if(numNA / length(incompleteIndicator) >= 0.1)
         cat('warning: ', numNA,
-            ' bootstrap samples (out of ', bs_samples, 
-            ') were dropped due to singular covariate matrix.',
-            'Likely due to very sparse covariate. Be wary of these results.\n', sep = '')
+          ' bootstrap samples (out of ', bs_samples, 
+          ') were dropped due to singular covariate matrix.',
+          'Likely due to very sparse covariate. Be wary of these results.\n', sep = '')
       bsMat <- bsMat[!incompleteIndicator,,drop = F]
     }
     covar <- cov(bsMat)
-  }else{ 
+  } else { 
     bsMat <- NULL
     covar <- NULL
   }
-  
+      
   names(fitInfo$coefficients) <- xNames
   fitInfo$covarOffset <- matrix(covarOffset, nrow = 1)
   fitInfo$bsMat <- bsMat
@@ -197,7 +202,7 @@ ic_sp <- function(formula, data, model = 'ph',
   }
   return(fitInfo)
 }
-
+    
 #' Control Parameters for ic_sp
 #' 
 #' @param useGA Should constrained gradient ascent step be used?
@@ -220,17 +225,17 @@ ic_sp <- function(formula, data, model = 'ph',
 #' @author Clifford Anderson-Bergman
 #' @export
 makeCtrls_icsp <- function(useGA = T, maxIter = 10000, baseUpdates = 5,
-                           regStart = NULL){
+      regStart = NULL){
   ans <- list(useGA = useGA, maxIter = maxIter, 
-              baseUpdates = baseUpdates, 
-              regStart = regStart, updateReg = TRUE)
+  baseUpdates = baseUpdates, 
+  regStart = regStart, updateReg = TRUE)
   return(ans)
 }
-
-
+        
+        
 fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   if(any(obsMat[,1] > obsMat[,2])) 
-    stop("left side of response interval greater than right side. This is impossible.")
+  stop("left side of response interval greater than right side. This is impossible.")
   useGA <- other_info$useGA
   maxIter <- other_info$maxIter
   baselineUpdates <- other_info$baselineUpdates
