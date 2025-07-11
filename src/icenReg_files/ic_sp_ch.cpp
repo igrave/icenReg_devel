@@ -173,6 +173,7 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
     
 
     icm_obj->baseCH.resize(nS);
+    icm_obj->backupCH.resize(nS);
     icm_obj->baseS.resize(nS);
     icm_obj->obs_inf.resize(nS);
     icm_obj->node_inf.resize(nS);
@@ -186,8 +187,14 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
         }
 
         icm_obj->baseCH[s].resize(maxInd + 2);
-        for(int i = 0; i <= maxInd; i++){ icm_obj->baseCH[s][i] = R_NegInf; }
+        icm_obj->backupCH[s].resize(maxInd + 2);
+
+        for(int i = 0; i <= maxInd; i++){ 
+            icm_obj->baseCH[s][i] = R_NegInf; 
+            icm_obj->backupCH[s][i] = R_NegInf; 
+        }
         icm_obj->baseCH[s][maxInd+1] = R_PosInf;
+        icm_obj->backupCH[s][maxInd+1] = R_PosInf;
         icm_obj->baseS[s].resize(maxInd + 2);
         icm_obj->baseS[s][0] = 1.0;
         icm_obj->baseS[s][maxInd+1] = 0;
@@ -307,12 +314,14 @@ void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> 
 
  
 void icm_Abst::icm_step(){
+    int a = 3;
     for(int s = 0; s < n_strata; s++){
         icm_step_s(s);
     }
 }
 
 void icm_Abst::icm_step_s(int s){
+        int a;
         backupCH[s] = baseCH[s];
         double llk_st = sum_llk(s);
         

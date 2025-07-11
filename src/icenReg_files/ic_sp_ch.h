@@ -125,16 +125,16 @@ public:
     void calc_base_p_derv();
     double getMaxScaleSize( vector<double> &p, vector<double> &prop_p);
     void gradientDescent_step();
-    void experimental_step();
-    void EM_step();
+    // void experimental_step();
+    // void EM_step();
     
     vector<vector<double>> dob_dp_both;
     vector<vector<double>> dob_dp_rightOnly;
 
 	double run(int maxIter, double tol, bool useGA, int baselineUpdates);
     
-    void numeric_dobs_dp(bool forGA);
-    void numeric_dobs2_d2p();
+    void numeric_dobs_dp(int s, bool forGA);
+    //void numeric_dobs2_d2p();
     
     double cal_log_obs(double s1, double s2, double eta);
     

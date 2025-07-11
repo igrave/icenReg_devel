@@ -77,7 +77,7 @@ double icm_Abst::getMaxScaleSize(vector<double> &p, vector<double> &prop_p){
     return(max_scale);
 }
 
-void icm_Abst::EM_step(){
+/* void icm_Abst::EM_step(){
 	double org_llk = sum_llk();
 	
     backupCH = baseCH;
@@ -105,9 +105,9 @@ void icm_Abst::EM_step(){
 		for(int i = 0; i < k; i++){ baseP[i] = baseP_backup[i];}
 		new_llk = llk_from_p();
 	}
-}
+} */
 
-void icm_Abst::numeric_dobs2_d2p(){
+/*void icm_Abst::numeric_dobs2_d2p(){
         	
     backupCH = baseCH;
     baseCH_2_baseS();
@@ -133,9 +133,9 @@ void icm_Abst::numeric_dobs2_d2p(){
     for(int i = 0; i < k; i++){ baseP[i]+= offSet; }
 	baseP_2_baseS();
 	
-}
+}*/
 
-void icm_Abst::experimental_step(){
+/* void icm_Abst::experimental_step(){
     
 	if(failedGA_counts > 500){return;}
 	
@@ -254,7 +254,7 @@ void icm_Abst::experimental_step(){
 		new_llk = sum_llk();
 	}
 		
-}
+} */
 
 
 void icm_Abst::gradientDescent_step(){
@@ -267,7 +267,7 @@ void icm_Abst::gradientDescent_step(){
         baseCH_2_baseS(s);
         baseS_2_baseP(s);
 
-        numeric_dobs_dp(true);
+        numeric_dobs_dp(s, true);
         int k = base_p_derv[s].size();
 
         prop_p[s].resize(k);

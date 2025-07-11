@@ -5,7 +5,7 @@
 //  Created by Clifford Anderson-Bergman on 10/18/15.
 //
 //
-
+/*
 void add_2_last(double delta, vector<double> &p){
     int k = p.size();
     double sum_others = 1.0 - p[k-1];
@@ -271,3 +271,4 @@ double icm_Abst::exchangeAndUpdate(double delta, int i1, int i2){
 }
 
 
+*/
