@@ -54,8 +54,8 @@ public:
     
     void icm_addPar(int s, vector<double> &delta);
 
-    void numericBaseDervsOne(int raw_ind, vector<double> &d);
-    void numericBaseDervsAllAct(vector<double> &d1, vector<double> &d2);
+    void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
+    void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
 
     
     void update_etas();
@@ -113,7 +113,7 @@ public:
     vector<vector<double>> base_p_derv2;			// For computing 2nd derivative
     vector<vector<double>> base_p_2ndDerv;
     vector<vector<double>> prop_p;
-    double llk_from_p();
+    double llk_from_p(int s);
     double numeric_p_der(int i);
     
     double dervConS_fromBaseS(double s, double eta);
@@ -151,7 +151,7 @@ public:
     
     vector<int> exchangeIndices;
     
-    void checkCH();
+    void checkCH(int s);
     
     void last_p_update();
     void vem();

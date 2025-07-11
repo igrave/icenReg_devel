@@ -71,7 +71,7 @@ void icm_Abst::update_etas(){
    Executed once in ic_sp_ch() after run returns.
    This could loop internally over strata */
 void icm_Abst::recenterBCH(){
-    for(s = 0; s < n_strata; s++){
+    for(int s = 0; s < n_strata; s++){
         int k = baseCH[s].size();
 	    for(int i = 1; i < (k-1); i++){
     		baseCH[s][i] += intercept[s];
@@ -104,10 +104,9 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
     icm_obj->h = 0.0001;
     icm_obj->almost_inf = 1.0/icm_obj->h;
 
-    
-    nS = INTEGER(R_strata);
+    Rcpp::IntegerVector strata(R_strata);
+    int nS = strata[0];
     icm_obj->n_strata = nS;
-
     // check inputs consistent for # strata
     if(Rf_length(Rlind) != Rf_length(Rrind)){
         Rprintf("length of Rlind and Rrind not equal\n");
@@ -133,7 +132,7 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
 
     for(int s = 0; s < icm_obj->n_strata; s++){
         int n = Rf_length(VECTOR_ELT(Rlind, s));
-        if(n != Rf_length(VECTOR_ELT(Rrind, s)){Rprintf("length of Rlind and Rrind not equal\n"); return;}
+        if(n != Rf_length(VECTOR_ELT(Rrind, s))){Rprintf("length of Rlind and Rrind not equal\n"); return;}
 
         icm_obj->base_p_obs[s].resize(n);
         icm_obj->etas[s].resize(n);
@@ -179,8 +178,8 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
     icm_obj->node_inf.resize(nS);
     icm_obj->usedVec.resize(nS);
 
-    for(int s = 0; s < icm_obj->n_strata; s++){
-
+    for(int s = 0; s < nS; s++){
+        int n = Rf_length(VECTOR_ELT(Rrind, s));
         int maxInd = 0;
         for(int i = 0; i < n; i++){
             maxInd = max(maxInd, INTEGER(VECTOR_ELT(Rrind, s))[i]);
@@ -250,7 +249,7 @@ void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
     	llk_l = llk_st;
     	baseCH[s][raw_ind] += h/2.0;
     	llk_st = par_llk(s, raw_ind);
-    	baseCH[raw_ind] -= h/2.0;
+    	baseCH[s][raw_ind] -= h/2.0;
     }
     
     if(llk_h == R_NegInf){
@@ -282,13 +281,13 @@ void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
     h = h * 25.0;
 }
 
-void icm_Abst::numericBaseDervsAllAct(vector<double> &d1, vector<double> &d2){
-    int k = baseCH.size();
+void icm_Abst::numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2){
+    int k = baseCH[s].size();
     d1.resize(k);
     d2.resize(k);
     vector<double> ind_dervs(2);
     for(int i = 1; i < (k-1); i++){
-        numericBaseDervsOne(i, ind_dervs);
+        numericBaseDervsOne(s, i, ind_dervs);
         d1[i] = ind_dervs[0];
         d2[i] = ind_dervs[1];
     }
@@ -300,7 +299,7 @@ void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> 
     d2.resize(k);
     vector<double> ind_dervs(2);
     for(int i = 0; i < k; i++){
-        numericBaseDervsOne(i + 1, ind_dervs);
+        numericBaseDervsOne(s, i + 1, ind_dervs);
         d1[i] = ind_dervs[0];
         d2[i] = ind_dervs[1];
     }
@@ -427,9 +426,9 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
             l_cont2[i] = 0;
             r_cont2[i] = 0;
 
-            lind = obs_inf[i].l;
-            rind = obs_inf[i].r;
-            pob  = obs_inf[i].pob;
+            lind = obs_inf[s][i].l;
+            rind = obs_inf[s][i].r;
+            pob  = obs_inf[s][i].pob;
             log_p = log(pob);
             l_ch = baseCH[s][lind];
             r_ch = baseCH[s][rind + 1];
@@ -639,7 +638,7 @@ double icm_Abst::run(int maxIter, double tol, bool useGD, int baselineUpdates){
             if(useGD){ gradientDescent_step(); }
         }
 			
-	    llk_new = sum_llk();
+	    llk_new = sum_llk_all();
 	    if(llk_new - llk_old > tol){metOnce = false;}
 	    if(metOnce == false){
 	    	if(llk_new - llk_old <= tol){

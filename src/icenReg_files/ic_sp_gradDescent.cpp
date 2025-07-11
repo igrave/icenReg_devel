@@ -47,9 +47,9 @@ void icm_Abst::baseS_2_baseCH(int s){
 }
 
 double icm_Abst::llk_from_p(int s){
-    baseP_2_baseS();
+    baseP_2_baseS(s);
     baseS_2_baseCH(s);
-    double ans = sum_llk(int s);
+    double ans = sum_llk(s);
     return(ans);
 }
 
@@ -261,7 +261,7 @@ void icm_Abst::gradientDescent_step(){
     
 	if(failedGA_counts > 500){return;}
 	
-    for(s = 0; s < n_strata; s++){
+    for(int s = 0; s < n_strata; s++){
         double org_llk = sum_llk(s);
         backupCH[s] = baseCH[s];
         baseCH_2_baseS(s);
@@ -395,7 +395,7 @@ void icm_Abst::numeric_dobs_dp(int s, bool forGA){
     dob_dp_rightOnly[s].resize(n);
     int lind, rind;
 	double h_mult = 0.0001;
-   	h[s] *= h_mult;
+   	h *= h_mult;
 
 	if(forGA){
 	    double sl, sr, llk_h,llk_l, this_eta, this_h;    
@@ -486,7 +486,7 @@ void icm_Abst::numeric_dobs_dp(int s, bool forGA){
         }
     }
 
-    h[s] = h[s]/h_mult;
+    h = h/h_mult;
 
 }
 
