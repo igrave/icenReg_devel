@@ -71,10 +71,12 @@ void icm_Abst::update_etas(){
    Executed once in ic_sp_ch() after run returns.
    This could loop internally over strata */
 void icm_Abst::recenterBCH(){
-	int k = baseCH.size();
-	for(int i = 1; i < (k-1); i++){
-		baseCH[i] += intercept;
-	}
+    for(s = 0; s < n_strata; s++){
+        int k = baseCH[s].size();
+	    for(int i = 1; i < (k-1); i++){
+    		baseCH[s][i] += intercept[s];
+    	} 
+    }
 }
 
 void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p){
@@ -546,17 +548,27 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
 	
 	optObj->recenterBCH();
 	
-    cumhaz2p_hat(optObj->baseCH, p_hat);
+    for(int s = 0; s < optObj->n_strata; s++){
+        cumhaz2p_hat(optObj->baseCH[s], p_hat[s]);
+    }
+    
     
     
     SEXP ans = PROTECT(Rf_allocVector(VECSXP, 5));
-    SEXP R_pans = PROTECT(Rf_allocVector(REALSXP,p_hat.size()));
+    SEXP R_pans = PROTECT(Rf_allocVector(VECSXP,p_hat.size()));
     SEXP R_coef = PROTECT(Rf_allocVector(REALSXP, optObj->reg_par.size()));
     SEXP R_fnl_llk = PROTECT(Rf_allocVector(REALSXP, 1));
     SEXP R_its = PROTECT(Rf_allocVector(REALSXP, 1));
     SEXP R_score = PROTECT(Rf_allocVector(REALSXP, optObj->reg_par.size()));
-    int phat_size = p_hat.size();
-    for(int i = 0; i < phat_size; i++){ REAL(R_pans)[i] = p_hat[i]; }
+
+    for (size_t i = 0; i < p_hat.size(); ++i) {
+        const vector<double>& inner = p_hat[i];
+        SEXP inner_vec = PROTECT(Rf_allocVector(REALSXP, inner.size()));
+        std::copy(inner.begin(), inner.end(), REAL(inner_vec));
+        SET_VECTOR_ELT(R_pans, i, inner_vec);
+        UNPROTECT(1); // unprotect inner_vec after assigning to list
+    }
+
     for(int i = 0; i < optObj->reg_par.size(); i++){
         REAL(R_coef)[i] = optObj->reg_par[i];
         REAL(R_score)[i] = optObj->reg_d1[i];
