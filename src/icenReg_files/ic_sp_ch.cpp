@@ -394,43 +394,7 @@ void icm_Abst::icm_step_s(int s){
 
 void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
     int k = reg_par.size();
-    int n = etas.size();
-    
-    Eigen::VectorXd l_cont(n);
-    Eigen::VectorXd r_cont(n);
-    Eigen::VectorXd totCont(n);
 
-    Eigen::VectorXd l_cont2(n);
-    Eigen::VectorXd r_cont2(n);
-    Eigen::VectorXd totCont2(n);
-    
-    int lind, rind;
-    double l_ch, r_ch, eta, pob, log_p;
-    for(int i = 0; i < n; i++){
-        l_cont[i]  = 0;
-        r_cont[i]  = 0;
-        l_cont2[i] = 0;
-        r_cont2[i] = 0;
-
-        lind = obs_inf[i].l;
-        rind = obs_inf[i].r;
-        pob  = obs_inf[i].pob;
-        log_p = log(pob);
-        l_ch = baseCH[lind];
-        r_ch = baseCH[rind + 1];
-        eta  = etas[i];
-        if(l_ch > R_NegInf){
-            l_cont[i]  = reg_d1_lnk(l_ch, eta, log_p);
-            l_cont2[i] = reg_d2_lnk(l_ch, eta, log_p);
-        }
-        if(r_ch < R_PosInf){
-            r_cont[i]  = -reg_d1_lnk(r_ch, eta, log_p);
-            r_cont2[i] = -reg_d2_lnk(r_ch, eta, log_p);
-        }
-        totCont[i] = l_cont[i] + r_cont[i];
-        totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
-    }
-    
     hess.resize(k, k);
     d1.resize(k);
     for(int i = 0; i < k; i++){
@@ -441,26 +405,66 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
         }
     }
 
-    double this_covar;
-    double this_w;
-    double this_w_covar;
-    double this_totCont;
-    double this_totCont2;
-    for(int i = 0; i < n; i++){
-        this_w = w[i];
-        this_totCont = totCont[i];
-        this_totCont2 = totCont2[i];
-        for(int a = 0; a < k; a++){
-            this_covar = covars(i,a);
-            this_w_covar = this_w * this_covar;
-            d1[a] += this_w_covar * this_totCont;
-            if(useFullHess){
-                for(int b = 0; b < a; b++){
-                    hess(a,b) += this_w_covar * covars(i,b) * this_totCont2;
-                    hess(b,a) = hess(a,b);
-                }
+    for(int s = 0; s < n_strata; s++){
+        int n = etas[s].size();
+    
+        Eigen::VectorXd l_cont(n);
+        Eigen::VectorXd r_cont(n);
+        Eigen::VectorXd totCont(n);
+
+        Eigen::VectorXd l_cont2(n);
+        Eigen::VectorXd r_cont2(n);
+        Eigen::VectorXd totCont2(n);
+
+
+        int lind, rind;
+        double l_ch, r_ch, eta, pob, log_p;
+        for(int i = 0; i < n; i++){
+            l_cont[i]  = 0;
+            r_cont[i]  = 0;
+            l_cont2[i] = 0;
+            r_cont2[i] = 0;
+
+            lind = obs_inf[i].l;
+            rind = obs_inf[i].r;
+            pob  = obs_inf[i].pob;
+            log_p = log(pob);
+            l_ch = baseCH[s][lind];
+            r_ch = baseCH[s][rind + 1];
+            eta  = etas[s][i];
+            if(l_ch > R_NegInf){
+                l_cont[i]  = reg_d1_lnk(l_ch, eta, log_p);
+                l_cont2[i] = reg_d2_lnk(l_ch, eta, log_p);
             }
-            hess(a,a) += this_w_covar * this_covar * this_totCont2;
+            if(r_ch < R_PosInf){
+                r_cont[i]  = -reg_d1_lnk(r_ch, eta, log_p);
+                r_cont2[i] = -reg_d2_lnk(r_ch, eta, log_p);
+            }
+            totCont[i] = l_cont[i] + r_cont[i];
+            totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
+        }
+
+        double this_covar;
+        double this_w;
+        double this_w_covar;
+        double this_totCont;
+        double this_totCont2;
+        for(int i = 0; i < n; i++){
+            this_w = w[s][i];
+            this_totCont = totCont[i];
+            this_totCont2 = totCont2[i];
+            for(int a = 0; a < k; a++){
+                this_covar = covars[s](i,a);
+                this_w_covar = this_w * this_covar;
+                d1[a] += this_w_covar * this_totCont;
+                if(useFullHess){
+                    for(int b = 0; b < a; b++){
+                        hess(a,b) += this_w_covar * covars[s](i,b) * this_totCont2;
+                        hess(b,a) = hess(a,b);
+                    }
+                }
+                hess(a,a) += this_w_covar * this_covar * this_totCont2;
+            }
         }
     }
 }
@@ -471,7 +475,7 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
 void icm_Abst::covar_nr_step(){
     int k = reg_par.size();
     calcAnalyticRegDervs(reg_d2, reg_d1);
-    double lk_0 = sum_llk();
+    double lk_0 = sum_llk_all();
 
 /*    for(int i = 0; i < k; i++){
         if(reg_d2[i] >= -0.0000001 || ISNAN(reg_d2[i])){
@@ -500,13 +504,13 @@ void icm_Abst::covar_nr_step(){
     reg_par += propVec;
     propVec *= -1;
     update_etas();
-    double lk_new = sum_llk();
+    double lk_new = sum_llk_all();
     while(lk_new < lk_0 && tries < 10){
         tries++;
         propVec *= 0.5;
         reg_par += propVec;
         update_etas();
-        lk_new = sum_llk();
+        lk_new = sum_llk_all();
     }
 }
 
