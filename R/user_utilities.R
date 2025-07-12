@@ -33,21 +33,26 @@ getSCurves <- function(fit, newdata = NULL){
 	grpNames <- names(etas)
 	transFxn <- get_link_fun(fit)
 	if(fit$par == 'semi-parametric' | fit$par == 'non-parametric'){
-		x_l <- fit$T_bull_Intervals[1,]
-		x_u <- fit$T_bull_Intervals[2,]
-		x_l <- c(x_l[1], x_l)
-		x_u <- c(x_l[1], x_u)
-		Tbull_intervals <- cbind(x_l,  x_u)
-		colnames(Tbull_intervals) <- c('lower', 'upper')
-		s <- 1 - c(0, cumsum(fit$p_hat))
-		ans <- list(Tbull_ints = Tbull_intervals, "S_curves" = list())
+    ans_list <- lapply(seq_along(fit$T_bull_Intervals), function(i) {
+      x_l <- fit$T_bull_Intervals[[i]][1,]
+		  x_u <- fit$T_bull_Intervals[[i]][2,]
+		  x_l <- c(x_l[1], x_l)
+		  x_u <- c(x_l[1], x_u)
+		  Tbull_intervals <- cbind(x_l,  x_u)
+		  colnames(Tbull_intervals) <- c('lower', 'upper')
+		  s <- 1 - c(0, cumsum(fit$p_hat[[i]]))
+		  ans <- list(Tbull_ints = Tbull_intervals, "S_curves" = list())
 		
-		for(i in 1:length(etas)){
-			eta <- etas[i]
-			ans[["S_curves"]][[grpNames[i] ]] <- transFxn(s, eta)
-		}
+		  for(i in 1:length(etas)){
+			  eta <- etas[i]
+			  ans[["S_curves"]][[grpNames[i] ]] <- transFxn(s, eta)
+		  }
 		class(ans) <- 'sp_curves'
-		return(ans)
+      ans
+    })
+
+		class(ans_list) <- 'sp_curves_list'
+		return(ans_list)
 	}
 	else{
 	  	stop('getSCurves only for semi-parametric model. Try getFitEsts')

@@ -69,7 +69,7 @@ plot.icenReg_fit <- function(x, y, newdata = NULL, fun = 'surv',
   
   if(x$par == 'semi-parametric' | x$par == 'non-parametric'){
     curveInfo <- getSCurves(x, y)
-    allx <- c(curveInfo$Tbull_ints[,1], curveInfo$Tbull_ints[,2])
+    allx <- unlist(lapply(curveInfo, function(x) x$Tbull_ints))
     dummyx <- range(allx, finite = TRUE)
     dummyy <- c(0,1)
     firstPlotList[['xlim']] = dummyx
@@ -142,6 +142,7 @@ lines.icenReg_fit <- function(x, y, newdata = NULL,
   argList <- list(...)
   # Resolving colors 
   colors <- argList$col
+  lty <- argList$lty
   nRows <- 1
   if(!is.null(newdata)) nRows <- icr_nrow(newdata)
   if(nRows > 1){
@@ -163,26 +164,35 @@ lines.icenReg_fit <- function(x, y, newdata = NULL,
   # Semi/non-parametric models
   if(model$par == 'semi-parametric' | model$par == 'non-parametric'){
     argList <- addIfMissing('s', 'type', argList)
-    curveInfo <- getSCurves(model, newdata)
-    allx <- c(curveInfo$Tbull_ints[,1], curveInfo$Tbull_ints[,2])
-    dummyx <- range(allx, finite = TRUE)
-    dummyy <- c(0,1)
-    x_l <- curveInfo$Tbull_ints[,1]
-    x_u <- curveInfo$Tbull_ints[,2]
-    k <- length(x_l)
-    ss <- curveInfo$S_curves
-    if(is.null(colors))  colors <- 1:length(ss)
-    if(length(colors) == 1) colors <- rep(colors, length(ss)) 
-    for(i in 1:length(ss)){
-      argList[['x']] <- x_l
-      argList[['y']] <- s_trans(ss[[i]])
-      argList[['col']] <- colors[i]
-      do.call(lines, argList)     
-      argList[['x']] <- x_u
-      do.call(lines, argList)     
-      argList[['x']] <- c(x_l[k], x_u[k])
-      argList[['y']] <- s_trans(c(ss[[i]][k], ss[[i]][k]))
-      do.call(lines, argList)
+    curveInfoList <- getSCurves(model, newdata)
+
+    if(is.null(lty))  linetype <- seq_along(curveInfoList)
+    if(length(lty) == 1) linetype <- rep(linetype, length(curveInfoList)) 
+
+    for (c_i in seq_along(curveInfoList)) {
+      curveInfo <- curveInfoList[[c_i]]
+      allx <- c(curveInfo$Tbull_ints[,1], curveInfo$Tbull_ints[,2])
+      dummyx <- range(allx, finite = TRUE)
+      dummyy <- c(0,1)
+      x_l <- curveInfo$Tbull_ints[,1]
+      x_u <- curveInfo$Tbull_ints[,2]
+      k <- length(x_l)
+      ss <- curveInfo$S_curves
+      browser()
+      if(is.null(colors))  colors <- 1:length(ss)
+      if(length(colors) == 1) colors <- rep(colors, length(ss)) 
+      for(i in 1:length(ss)){
+        argList[['x']] <- x_l
+        argList[['y']] <- s_trans(ss[[i]])
+        argList[['col']] <- colors[i]
+        argList[['lty']] <- linetype[c_i]
+        do.call(lines, argList)     
+        argList[['x']] <- x_u
+        do.call(lines, argList)     
+        argList[['x']] <- c(x_l[k], x_u[k])
+        argList[['y']] <- s_trans(c(ss[[i]][k], ss[[i]][k]))
+        do.call(lines, argList)
+      }
     }
   }
   # Parametric/Bayes models

@@ -81,6 +81,20 @@ cumhaz2p_hat()
 4. Finally allow n_strata > 1
 
 
+### Still to do
+
+- [ ] Add labels for strata in the output
+- [ ] plot
+  - in plot find max range of all strata
+  - lines.icenReg_fit should handle list from getScurves()
+  
+- [x] gScurves
+- [ ] Add tests for stratified hazards
+- [ ] Add documentation for stratified hazards
+- [ ] Add examples for stratified hazards
+
+
+
 ## Profile Llikelihood
 
  Maybe we can set 
