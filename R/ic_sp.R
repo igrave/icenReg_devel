@@ -288,7 +288,7 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, strata, other_
   myFit$llk <- c_ans$llk
   myFit$iterations <- c_ans$iterations
   myFit$score <- c_ans$score
-  myFit[['T_bull_Intervals']] <- rbind(mi_info[['mi_l']], mi_info[['mi_r']]) # TODO: fix this for strata
+  myFit[['T_bull_Intervals']] <- lapply(mi_info, function(mi) rbind(mi[['mi_l']], mi[['mi_r']]))
   myFit$p_hat <- lapply(myFit$p_hat, function(p) p / sum(p)) 
   # if(recenterCovars == TRUE){
   #   myFit$pca_coefs <- myFit$coefficients
