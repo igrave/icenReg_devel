@@ -151,6 +151,8 @@ ic_sp <- function(
   dataEnv[['x']] <- as.matrix(x, nrow = nrow(yMat))
   if(ncol(dataEnv$x) == 1) colnames(dataEnv[['x']]) <- xNames
   dataEnv[['y']] <- yMat
+  dataEnv[['strata']] <- strata
+  dataEnv[['weights']] <- weights
   seeds = as.integer( runif(bs_samples, 0, 2^31) )
   bsMat <- numeric()
   if(useMCores) `%mydo%` <- `%dopar%`
@@ -194,6 +196,7 @@ ic_sp <- function(
   fitInfo$formula = formula
   fitInfo$.dataEnv <- new.env()
   if(!missing(data)){ fitInfo$.dataEnv$data = data }
+  list2env(dataEnv, envir = fitInfo$.dataEnv)
   fitInfo$par = 'semi-parametric'
   fitInfo$model = model
   fitInfo$reg_pars <- fitInfo$coefficients
@@ -202,6 +205,7 @@ ic_sp <- function(
   if(fitInfo$iterations == controls$maxIter){
     warning('Maximum iterations reached in ic_sp.')
   }
+  fitInfo$other_info <- other_info
   return(fitInfo)
 }
     

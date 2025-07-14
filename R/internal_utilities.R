@@ -26,6 +26,7 @@ bs_sampleData <- function(rawDataEnv, weights){
 	weights <- as.numeric(tabledInds)
 	sampEnv[['x']] <- rawDataEnv[['x']][unqInds,]
 	sampEnv[['y']] <- rawDataEnv[['y']][unqInds,]
+  sampEnv[['strata']] <- rawDataEnv[['strata']][unqInds]
 	sampEnv[['w']] <- weights
 	return(sampEnv)
 }
@@ -34,7 +35,7 @@ getBS_coef <- function(sampDataEnv, callText = 'ic_ph', other_info){
 	xMat <- cbind(sampDataEnv$x,1)
 	invertResult <- try(diag(solve(t(xMat) %*% xMat )), silent = TRUE)
 	if(is(invertResult, 'try-error')) {return( rep(NA, ncol(xMat) -1) ) }
-	output <- fit_ICPH(sampDataEnv$y, sampDataEnv$x, callText, sampDataEnv$w, other_info)$coefficients
+	output <- fit_ICPH(sampDataEnv$y, sampDataEnv$x, callText, sampDataEnv$w, sampDataEnv$strata, other_info)$coefficients
 	return(output)
 }
 

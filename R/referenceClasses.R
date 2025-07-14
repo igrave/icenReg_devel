@@ -13,7 +13,8 @@ icenReg_fit <- setRefClass(Class = 'icenReg_fit',
                                   'iterations',
                                   'score', 
                                   'covarOffset', 
-                                  'depType'
+                                  'depType',
+                                  'other_info'
                        ),
                        methods = list(
                          show = function(){

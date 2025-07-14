@@ -178,7 +178,6 @@ lines.icenReg_fit <- function(x, y, newdata = NULL,
       x_u <- curveInfo$Tbull_ints[,2]
       k <- length(x_l)
       ss <- curveInfo$S_curves
-      browser()
       if(is.null(colors))  colors <- 1:length(ss)
       if(length(colors) == 1) colors <- rep(colors, length(ss)) 
       for(i in 1:length(ss)){

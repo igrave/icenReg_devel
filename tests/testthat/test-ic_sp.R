@@ -45,3 +45,12 @@ test_that("example PO model works", {
   
   expect_snapshot(summary(po_fit))
 })
+
+test_that("bootstrap works", {
+  set.seed(1)
+  
+  sim_data <- simIC_weib(n = 100, inspections = 5, inspectLength = 1)
+  ph_fit <- ic_sp(Surv(l, u, type = 'interval2') ~ x1 + x2, data = sim_data, bs_samples = 10)
+  ph_fit_s <- ic_sp(Surv(l, u, type = 'interval2') ~ x1 + x2, data = sim_data, strata=rep(0:1, length = nrow(sim_data)))
+
+})
