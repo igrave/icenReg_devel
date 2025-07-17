@@ -1,0 +1,269 @@
+//
+//  ic_sp_ch.h
+//  
+//
+//  Created by Cliff Anderson Bergman on 5/25/15.
+//
+//
+
+#ifndef ____ic_sp_ch__
+#define ____ic_sp_ch__
+/*#include "../Eigen_local/Dense"
+#include <stdio.h>
+#include <vector>
+#include <R.h>
+#include <Rinternals.h>
+#include <Rmath.h>  */
+
+//using namespace std;
+//#include "../icenReg_files/basicUtilities.cpp"
+
+
+class node_info{
+public:
+    vector<int> l;      //vector that indicates the observations for which this node is the left side
+    vector<int> r;      //vector that indicated the observations for which this node is the right side
+//    double par;         //log cumulative hazard
+};
+
+class obInf{
+public:
+    int l,r;
+    double pob;
+};
+
+
+class icm_Abst{
+public:
+    void update_p_ob(int s, int i);    //done, not checked
+    
+    
+    double sum_llk_all(); //done, not checked
+    // calculates the entire likelihood function.
+    // Does not update eta or hazards!
+    double sum_llk(int s);    // calculates likelihood for a single stratum
+
+
+    double par_llk(int s, int ind);     //done, not checked
+    // only calculates partial likelihood based on an active index
+    
+    vector<vector<obInf>> obs_inf;
+    vector<vector<node_info>> node_inf;
+    
+    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2);
+    
+    void icm_addPar(int s, vector<double> &delta);
+
+    void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
+    void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
+
+    
+    void update_etas();
+	virtual void stablizeBCH() = 0;
+    void recenterBCH();
+	
+    void icm_step();
+    void icm_step_s(int s);
+    
+    void numericRegDervs();
+    void covar_nr_step();
+    
+    virtual double basHaz2CondS(double ch, double eta) = 0;     //done
+    virtual double baseS2CondS(double s, double eta) = 0;
+    virtual double base_d1_contr(double h, double pob, double eta) = 0; //done, not checked
+    virtual double reg_d1_lnk(double ch, double xb, double log_p) = 0;
+    virtual double reg_d2_lnk(double ch, double xb, double log_p) = 0;
+    
+    void calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1);
+    void rawDervs2ActDervs();
+    
+    vector<Eigen::VectorXd>     baseCH;     //Vector of baseline log cumulative hazards.
+                                    //baseH[0] fixed to -Inf, baseH[k-1] = Inf
+	vector<double> intercept;				//used for numerical stabilization
+	
+    vector<Eigen::VectorXd>     backupCH;   //used to save values in optimization steps
+    Eigen::VectorXd     propVec;    //used for proposition step during NR update on regression parameters
+ /*   Eigen::VectorXd     H_d1;       //Vector of derivatives for CH's
+    Eigen::MatrixXd     H_d2;       //Hessian for CH's          */
+    vector<Eigen::VectorXd>     base_p_obs; //Baseline probability of each observation  //initialized
+    vector<Eigen::VectorXd>     etas;       //linear combination of regression parameters   //initialized
+    vector<Eigen::VectorXd>     expEtas;    //exp(etas) //initialized
+    Eigen::VectorXd     reg_par;    //regression parameters //initialized
+    vector<Eigen::MatrixXd>     covars;     //covariates        //initialized
+    Eigen::VectorXd     reg_d1;     //first derivatives of regression parameters        //initialized
+    Eigen::MatrixXd     reg_d2;     //Hessian for derivatives       //initialized
+//    Eigen::VectorXd     reg_d2;     //second derivatives: ignoring off diagonals!
+    
+    vector<vector<double>> w;
+    
+    int n_strata;             //number of strata
+    
+    double maxBaseChg;      //Max change in baseline parameters during icm step
+    double h;
+    bool hasCovars;
+    bool updateCovars;
+    
+    bool startGD;
+    vector<vector<double>> baseS;
+    vector<vector<double>> baseP;
+    vector<vector<double>> baseP_backup;
+    //vector<double> d_cond_S_left;  // IG not used?
+    //vector<double> d_cond_S_right; //IG not used?
+    vector<vector<double>> base_p_derv;
+    vector<vector<double>> base_p_derv2;			// For computing 2nd derivative
+    vector<vector<double>> base_p_2ndDerv;
+    vector<vector<double>> prop_p;
+    double llk_from_p(int s);
+    double numeric_p_der(int i);
+    
+    double dervConS_fromBaseS(double s, double eta);
+    void baseCH_2_baseS(int s);
+    void baseS_2_baseP(int s);
+    void baseP_2_baseS(int s);
+    void baseS_2_baseCH(int s);
+    void calc_cond_S_derv();
+    void calc_base_p_derv();
+    double getMaxScaleSize( vector<double> &p, vector<double> &prop_p);
+    void gradientDescent_step();
+    // void experimental_step();
+    // void EM_step();
+    
+    vector<vector<double>> dob_dp_both;
+    vector<vector<double>> dob_dp_rightOnly;
+
+	double run(int maxIter, double tol, bool useGA, int baselineUpdates);
+    
+    void numeric_dobs_dp(int s, bool forGA);
+    //void numeric_dobs2_d2p();
+    
+    double cal_log_obs(double s1, double s2, double eta);
+    
+    vector<vector<bool>> usedVec;
+    
+    double almost_inf;
+    int failedGA_counts;
+    int iter;
+    int numBaselineIts;
+    bool useFullHess;
+    
+    double exchangeAndUpdate(double delta, int i1, int i2);
+    // REQUIRES baseP BEING UP TO DATE!!!
+    
+    vector<int> exchangeIndices;
+    
+    void checkCH(int s);
+    
+    void last_p_update();
+    void vem();
+    void exchange_p_opt(int i1, int i2);
+    void vem_sweep();
+    void vem_sweep2();
+};
+
+void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata, icm_Abst* icm_obj);
+//function for setting up a actSet_Abst class
+
+void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p);
+
+class icm_ph : public icm_Abst{
+public:
+    double basHaz2CondS(double ch, double eta){
+        if(ch == R_NegInf)  return(1);
+        if(ch == R_PosInf)  return(0);
+        return(exp(-exp(ch + eta) )) ;}
+    
+    double baseS2CondS(double s, double eta){
+        if(s >= 1.0) return(1.0);
+        if(s <= 0.0) return(0.0);
+/*        double expEta = exp(eta);
+        double ans = pow(s, expEta);    */
+        double logCH = log( -log(s) );
+        double ans = exp(-exp(logCH + eta));
+        return(ans);
+    }
+    
+    double base_d1_contr(double ch, double pob, double eta){
+        double expVal = -exp(eta + ch);
+        double logAns = eta + ch + expVal - log(pob);
+        return (-exp(logAns));
+    }
+    
+    double reg_d1_lnk(double ch, double xb, double log_p){
+        double term1 = -exp(ch + xb);
+        return(-exp(term1 + ch + xb - log_p));
+    }
+    double reg_d2_lnk(double ch, double xb, double log_p){
+        double term1 = -exp(ch + xb);
+        double term2 = exp(term1 - log_p);
+        return(term1 * term2 + term1 * term1 *term2);
+    }
+	
+	void stablizeBCH(){
+        for(int s = 0; s < n_strata; s++){
+            int k = baseCH[s].size();
+		    double thisChange = baseCH[s][k-2] - 2.0;
+		    intercept[s] += thisChange;
+		    for(int i = 1; i < (k-1); i++){
+    			baseCH[s][i] -= thisChange;
+	    	} 
+        }
+        update_etas();
+	}
+	
+	
+    virtual ~icm_ph(){};
+};
+
+
+class icm_po : public icm_Abst{
+public:
+    double basHaz2CondS(double ch, double eta){
+        if(ch == R_NegInf)  return(1);
+        if(ch == R_PosInf)  return(0);
+        double mu = exp(ch);
+        double s = exp(-mu);
+        double s_nu = exp(eta - mu);
+        return( (s_nu) / (s_nu - s + 1)) ;}
+    
+    double baseS2CondS(double s, double eta){
+        double nu = exp(eta);
+        double s_nu = s * nu;
+        return((s_nu)/ (s_nu - s + 1) );
+    }
+    
+    double base_d1_contr(double ch, double pob, double eta){
+        double s = exp(-exp(ch));
+        double s_nu = exp(eta - exp(ch));
+        double logAns = -log(pob) - 2 * log(s_nu - s + 1) + ch - exp(h);
+        return (-exp(logAns));
+    }
+    
+    double reg_d1_lnk(double ch, double xb, double log_p){
+        double s = exp(-exp(ch));
+        double a = exp(xb-exp(ch));
+        double ans = exp( log(a *(1-s)) - 2 * log( a - s + 1) - log_p);
+        return(ans);
+//        return( a * (1-s) / pow(a - s + 1, 2.0) );
+    }
+    double reg_d2_lnk(double ch, double xb, double log_p){
+        double s = exp(-exp(ch));
+        double a = exp(xb-exp(ch));
+        double b = a - s + 1;
+        double top =  (a * (1 - s) * b - 2 * a * a *(1-s)) ;
+        double bottom = pow(b, 3.0);
+        double ans = top/(bottom * exp(log_p));
+        return(ans);
+    }
+	void stablizeBCH(){}
+	
+    virtual ~icm_po(){};
+};
+
+extern "C" {
+SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
+ 			  SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
+ 			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
+ 			  SEXP R_initialRegVals);
+    SEXP findMI(SEXP R_AllVals, SEXP isL, SEXP isR, SEXP lVals, SEXP rVals);
+}
+#endif /* defined(____ic_sp_cm__) */
