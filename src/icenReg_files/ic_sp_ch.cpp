@@ -320,16 +320,87 @@ void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> 
     }
 }
 
- 
+
+void icm_Abst::autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2){
+    int k = baseCH[s].size() - 2;
+    d1.resize(k);
+    d2.resize(k);
+
+    vector<AD<double>> adLL(1); 
+    vector<AD<double>> adCH(k);
+    vector<double> thisCH(k);
+    for(int i = 0; i < k; i++){
+        thisCH[i] = baseCH[s][i + 1];
+        adCH[i] = AD<double>(baseCH[s][i + 1]);
+    }
+    CppAD::Independent(adCH);
+    // write likelihood function for this strata using supplied CH
+    adLL[0] = 0.0;
+    AD<double> chl, chr, temp_ll;
+    int n = obs_inf[s].size();
+    for(int i = 0; i < n; i++){
+        temp_ll = 0;
+
+        if(obs_inf[s][i].l - 1 < 0){
+            chl = baseCH[s][obs_inf[s][i].l];
+        } else {
+            chl = adCH[obs_inf[s][i].l - 1];
+        }
+        if(chl == R_NegInf)  temp_ll += 1;
+        if(chl == R_PosInf)  temp_ll += 0;
+        
+        temp_ll += exp(-exp(chl + etas[s][i]));
+        
+        if(obs_inf[s][i].r >= k){
+            chr = baseCH[s][obs_inf[s][i].r + 1];
+        } else {
+            chr = adCH[obs_inf[s][i].r];
+        }
+        if(chr == R_NegInf)  temp_ll -= 1;
+        if(chr == R_PosInf)  temp_ll -= 0;
+        temp_ll -= exp(-exp(chr + etas[s][i]));
+
+        adLL[0] += log(temp_ll) * w[s][i];
+    }
+
+     CppAD::ADFun<double> ll_func(adCH, adLL);
+    // compute first derivatives
+    std::vector<double> gradient = ll_func.Jacobian(thisCH);
+    for(int i = 0; i < k; i++){
+        d1[i] = gradient[i];
+    }
+
+    // compute second derivatives only on the main diagonal
+   std::vector<bool> pattern(k * k, false);
+    for (int i = 0; i < k; ++i) {
+        pattern[i * k + i] = true;
+    }
+    
+    std::vector<double> w_sparse(1, 1.0);
+    // Compute the sparse Hessian diagonal (actually, all diagonal elements)
+    vector<double> sparse_diag = ll_func.SparseHessian(thisCH, w_sparse, pattern);
+    // Copy the diagonal elements to d2
+    for (int i = 0; i < k; ++i) {
+        d2[i] = sparse_diag[i * k + i];
+    }
+    // Check for NaN or Inf values in d2
+    for (int i = 0; i < k; ++i) {
+        if (std::isnan(d2[i]) || std::isinf(d2[i])) {
+            d2[i] = R_NegInf; // or some other value to indicate an error
+        }
+    }
+
+}
+
+
+
 void icm_Abst::icm_step(){
-    int a = 3;
     for(int s = 0; s < n_strata; s++){
         icm_step_s(s);
     }
 }
 
 void icm_Abst::icm_step_s(int s){
-        int a;
         backupCH[s] = baseCH[s];
         double llk_st = sum_llk(s);
         
@@ -337,7 +408,16 @@ void icm_Abst::icm_step_s(int s){
         vector<double> d2;
         numericBaseDervsAllRaw(s, d1, d2);
         
+        vector<double> ad1;
+        vector<double> ad2;
+        autoBaseDervsAll(s, ad1, ad2);
+
         int thisSize = d1.size();
+
+       Rprintf("Compare Derivatives! \n");
+        for(int i = 0; i < thisSize; i ++){
+             Rcpp::Rcout << "nd: " << d2[i] << " ad: "<< ad2[i] << "\n";
+        }
 
         for(int i = 0; i < thisSize; i ++){
             if(d2[i] == R_NegInf){d2[i] = -almost_inf;}

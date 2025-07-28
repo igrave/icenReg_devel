@@ -18,6 +18,9 @@
 
 using namespace std;
 
+#include <cppad/cppad.hpp>
+using CppAD::AD;
+
 #include "icenReg_files/basicUtilities.cpp"
 #include "icenReg_files/ic_par.h"
 #include "icenReg_files/ic_par_aft.h"

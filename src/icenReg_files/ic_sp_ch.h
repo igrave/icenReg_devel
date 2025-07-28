@@ -56,6 +56,7 @@ public:
 
     void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
     void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
+    void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2);
 
     
     void update_etas();
