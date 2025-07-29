@@ -16,7 +16,7 @@ extern SEXP dGeneralGamma(SEXP, SEXP, SEXP, SEXP);
 extern SEXP EMICM(SEXP, SEXP, SEXP, SEXP);
 extern SEXP fastNumericInsert(SEXP, SEXP, SEXP);
 extern SEXP findMI(SEXP, SEXP, SEXP, SEXP, SEXP);
-extern SEXP ic_sp_ch(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP ic_sp_ch(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP optCliq(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP q_regTrans(SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP qGeneralGamma(SEXP, SEXP, SEXP, SEXP);
@@ -31,7 +31,7 @@ static const R_CallMethodDef CallEntries[] = {
   {"EMICM",                         (DL_FUNC) &EMICM,                          4},
   {"fastNumericInsert",             (DL_FUNC) &fastNumericInsert,              3},
   {"findMI",                        (DL_FUNC) &findMI,                         5},
-  {"ic_sp_ch",                      (DL_FUNC) &ic_sp_ch,                      11},
+  {"ic_sp_ch",                      (DL_FUNC) &ic_sp_ch,                      12},
   {"optCliq",                       (DL_FUNC) &optCliq,                        5},
   {"q_regTrans",                    (DL_FUNC) &q_regTrans,                     5},
   {"qGeneralGamma",                 (DL_FUNC) &qGeneralGamma,                  4},

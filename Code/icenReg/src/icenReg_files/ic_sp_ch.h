@@ -35,24 +35,26 @@ public:
 
 class icm_Abst{
 public:
-    void update_p_ob(int i);    //done, not checked
+    void update_p_ob(int s, int i);    //done, not checked
     
-    double sum_llk();           //done, not checked
+    
+    double sum_llk_all(); //done, not checked
     // calculates the entire likelihood function.
     // Does not update eta or hazards!
-    
-    double par_llk(int ind);     //done, not checked
+    double sum_llk(int s);    // calculates likelihood for a single stratum
+
+    double par_llk(int s, int ind);     //done, not checked
     // only calculates partial likelihood based on an active index
     
-    vector<obInf> obs_inf;
-    vector<node_info> node_inf;
+    vector<vector<obInf>> obs_inf;
+    vector<vector<node_info>> node_inf;
     
-    void numericBaseDervsAllRaw(vector<double> &d1, vector<double> &d2);
+    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2);
     
-    void icm_addPar(vector<double> &delta);
+    void icm_addPar(int s, vector<double> &delta);
 
-    void numericBaseDervsOne(int raw_ind, vector<double> &d);
-    void numericBaseDervsAllAct(vector<double> &d1, vector<double> &d2);
+    void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
+    void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
 
     
     void update_etas();
@@ -60,6 +62,7 @@ public:
     void recenterBCH();
 	
     void icm_step();
+    void icm_step_s(int s);
     
     void numericRegDervs();
     void covar_nr_step();
@@ -73,24 +76,26 @@ public:
     void calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1);
     void rawDervs2ActDervs();
     
-    Eigen::VectorXd     baseCH;     //Vector of baseline log cumulative hazards.
+    vector<Eigen::VectorXd>     baseCH;     //Vector of baseline log cumulative hazards.
                                     //baseH[0] fixed to -Inf, baseH[k-1] = Inf
-	double intercept;				//used for numerical stabilization
+    vector<double> intercept;				//used for numerical stabilization
 	
-    Eigen::VectorXd     backupCH;   //used to save values in optimization steps
+    vector<Eigen::VectorXd>     backupCH;   //used to save values in optimization steps
     Eigen::VectorXd     propVec;    //used for proposition step during NR update on regression parameters
  /*   Eigen::VectorXd     H_d1;       //Vector of derivatives for CH's
     Eigen::MatrixXd     H_d2;       //Hessian for CH's          */
-    Eigen::VectorXd     base_p_obs; //Baseline probability of each observation  //initialized
-    Eigen::VectorXd     etas;       //linear combination of regression parameters   //initialized
-    Eigen::VectorXd     expEtas;    //exp(etas) //initialized
+    vector<Eigen::VectorXd>     base_p_obs; //Baseline probability of each observation  //initialized
+    vector<Eigen::VectorXd>     etas;       //linear combination of regression parameters   //initialized
+    vector<Eigen::VectorXd>     expEtas;    //exp(etas) //initialized
     Eigen::VectorXd     reg_par;    //regression parameters //initialized
-    Eigen::MatrixXd     covars;     //covariates        //initialized
+    vector<Eigen::MatrixXd>     covars;     //covariates        //initialized
     Eigen::VectorXd     reg_d1;     //first derivatives of regression parameters        //initialized
     Eigen::MatrixXd     reg_d2;     //Hessian for derivatives       //initialized
 //    Eigen::VectorXd     reg_d2;     //second derivatives: ignoring off diagonals!
     
-    vector<double> w;
+    vector<vector<double>> w;
+    
+    int n_strata;             //number of strata
     
     double maxBaseChg;      //Max change in baseline parameters during icm step
     double h;
@@ -98,41 +103,41 @@ public:
     bool updateCovars;
     
     bool startGD;
-    vector<double> baseS;
-    vector<double> baseP;
-    vector<double> baseP_backup;
-    vector<double> d_cond_S_left;
-    vector<double> d_cond_S_right;
-    vector<double> base_p_derv;
-    vector<double> base_p_derv2;			// For computing 2nd derivative
-    vector<double> base_p_2ndDerv;
-    vector<double> prop_p;
-    double llk_from_p();
+    vector<vector<double>> baseS;
+    vector<vector<double>> baseP;
+    vector<vector<double>> baseP_backup;
+    //vector<double> d_cond_S_left;  // IG not used?
+    //vector<double> d_cond_S_right; //IG not used?
+    vector<vector<double>> base_p_derv;
+    vector<vector<double>> base_p_derv2;			// For computing 2nd derivative
+    vector<vector<double>> base_p_2ndDerv;
+    vector<vector<double>> prop_p;
+    double llk_from_p(int s);
     double numeric_p_der(int i);
     
     double dervConS_fromBaseS(double s, double eta);
-    void baseCH_2_baseS();
-    void baseS_2_baseP();
-    void baseP_2_baseS();
-    void baseS_2_baseCH();
+    void baseCH_2_baseS(int s);
+    void baseS_2_baseP(int s);
+    void baseP_2_baseS(int s);
+    void baseS_2_baseCH(int s);
     void calc_cond_S_derv();
     void calc_base_p_derv();
     double getMaxScaleSize( vector<double> &p, vector<double> &prop_p);
     void gradientDescent_step();
-    void experimental_step();
-    void EM_step();
+    // void experimental_step();
+    // void EM_step();
     
-    vector<double> dob_dp_both;
-    vector<double> dob_dp_rightOnly;
+    vector<vector<double>> dob_dp_both;
+    vector<vector<double>> dob_dp_rightOnly;
 
 	double run(int maxIter, double tol, bool useGA, int baselineUpdates);
     
-    void numeric_dobs_dp(bool forGA);
-    void numeric_dobs2_d2p();
+    void numeric_dobs_dp(int s, bool forGA);
+    //void numeric_dobs2_d2p();
     
     double cal_log_obs(double s1, double s2, double eta);
     
-    vector<bool> usedVec;
+    vector<vector<bool>> usedVec;
     
     double almost_inf;
     int failedGA_counts;
@@ -145,7 +150,7 @@ public:
     
     vector<int> exchangeIndices;
     
-    void checkCH();
+    void checkCH(int s);
     
     void last_p_update();
     void vem();
@@ -154,7 +159,7 @@ public:
     void vem_sweep2();
 };
 
-void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, icm_Abst* icm_obj);
+void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata, icm_Abst* icm_obj);
 //function for setting up a actSet_Abst class
 
 void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p);
@@ -193,13 +198,15 @@ public:
     }
 	
 	void stablizeBCH(){
-		int k = baseCH.size();
-		double thisChange = baseCH[k-2] - 2.0;
-		intercept += thisChange;
-		for(int i = 1; i < (k-1); i++){
-			baseCH[i] -= thisChange;
-		}
-		update_etas();	
+        for(int s = 0; s < n_strata; s++){
+            int k = baseCH[s].size();
+		    double thisChange = baseCH[s][k-2] - 2.0;
+		    intercept[s] += thisChange;
+		    for(int i = 1; i < (k-1); i++){
+    			baseCH[s][i] -= thisChange;
+	    	} 
+        }
+        update_etas();
 	}
 	
 	
@@ -253,7 +260,7 @@ public:
 
 extern "C" {
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
- 			  SEXP R_w, SEXP R_use_GD, SEXP R_maxiter,
+ 			  SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
  			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
  			  SEXP R_initialRegVals);
     SEXP findMI(SEXP R_AllVals, SEXP isL, SEXP isR, SEXP lVals, SEXP rVals);

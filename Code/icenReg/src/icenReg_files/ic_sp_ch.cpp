@@ -11,57 +11,69 @@
 
 
 /*      LIKELIHOOD TOOLS        */
-void icm_Abst::update_p_ob(int i){
-    double chl = baseCH[ obs_inf[i].l ];
-    double chr = baseCH[ obs_inf[i].r +1 ];
-    double eta = etas[i];
-    obs_inf[i].pob = basHaz2CondS(chl, eta) - basHaz2CondS(chr, eta);
+void icm_Abst::update_p_ob(int s, int i){
+    double chl = baseCH[s][ obs_inf[s][i].l ];
+    double chr = baseCH[s][ obs_inf[s][i].r +1 ];
+    double eta = etas[s][i];
+    obs_inf[s][i].pob = basHaz2CondS(chl, eta) - basHaz2CondS(chr, eta);
 }
 
-double icm_Abst::sum_llk(){
-    int n = obs_inf.size();
+double icm_Abst::sum_llk(int s){
+    int n = obs_inf[s].size();
     double ans = 0;
     for(int i = 0; i < n; i++){
-        update_p_ob(i);
-        ans += log(obs_inf[i].pob) * w[i];
+        update_p_ob(s, i);
+        ans += log(obs_inf[s][i].pob) * w[s][i];
     }
     if(ISNAN(ans)) {ans = R_NegInf;}
     return(ans);
 }
 
-double icm_Abst::par_llk(int ind){
-    int num_l = node_inf[ind].l.size();
-    int num_r = node_inf[ind].r.size();
+double icm_Abst::sum_llk_all(){
+    double ans = 0;
+    for(int s = 0; s < n_strata; s++){
+        ans += sum_llk(s);
+    }
+    return(ans);
+}
+
+double icm_Abst::par_llk(int s, int ind){
+    int num_l = node_inf[s][ind].l.size();
+    int num_r = node_inf[s][ind].r.size();
     double ans = 0;
     int thisInd;
     for(int i = 0; i < num_l; i++){
-        thisInd = node_inf[ind].l[i];
-        update_p_ob(thisInd);
-        ans+= log(obs_inf[thisInd].pob) * w[thisInd];
+        thisInd = node_inf[s][ind].l[i];
+        update_p_ob(s, thisInd);
+        ans+= log(obs_inf[s][thisInd].pob) * w[s][thisInd];
     }
     for(int i = 0; i < num_r; i++){
-        thisInd = node_inf[ind].r[i];
-        update_p_ob(thisInd);
-        ans+= log(obs_inf[thisInd].pob) * w[thisInd];
+        thisInd = node_inf[s][ind].r[i];
+        update_p_ob(s, thisInd);
+        ans+= log(obs_inf[s][thisInd].pob) * w[s][thisInd];
     }
     if(ISNAN(ans)) ans = R_NegInf;
     return(ans);
 }
 
 void icm_Abst::update_etas(){
-    etas = covars * reg_par;
-    for(int i = 0; i < etas.size(); i++){
-		etas[i] += intercept;
-        expEtas[i] = exp(etas[i] );
-	}
+    for(int s = 0; s < n_strata; s++){
+        etas[s] = covars[s] * reg_par;
+        for(int i = 0; i < etas[s].size(); i++){
+		    etas[s][i] += intercept[s];
+            expEtas[s][i] = exp(etas[s][i] );
+	    }
+    }
 }
 
 
 void icm_Abst::recenterBCH(){
-	int k = baseCH.size();
-	for(int i = 1; i < (k-1); i++){
-		baseCH[i] += intercept;
-	}
+    for(int s = 0; s < n_strata; s++){
+        int k = baseCH[s].size();
+	    for(int i = 1; i < (k-1); i++){
+    		baseCH[s][i] += intercept[s];
+    	} 
+    }
 }
 
 void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p){
@@ -73,42 +85,81 @@ void cumhaz2p_hat(Eigen::VectorXd &ch, vector<double> &p){
 }
 
 
-void icm_Abst::icm_addPar(vector<double> &delta){
+void icm_Abst::icm_addPar(int s, vector<double> &delta){
     int p_k = delta.size();
-    int a_k = baseCH.size();
+    int a_k = baseCH[s].size();
     if( (p_k+2) != a_k){Rprintf("in icm_addPar, delta is not the same length as actIndex!\n");return;}
-    for(int i = 0; i < p_k; i++){ baseCH[i+1] += delta[i]; }
+    for(int i = 0; i < p_k; i++){ baseCH[s][i+1] += delta[i]; }
 }
 
 
 
 
 /*      INITIALIZATION TOOLS    */
-void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, 
+void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
 				SEXP R_RegPars, icm_Abst* icm_obj){
     icm_obj->h = 0.0001;
     icm_obj->almost_inf = 1.0/icm_obj->h;
-    int n = LENGTH(Rlind);
-    if(n != LENGTH(Rrind)){Rprintf("length of Rlind and Rrind not equal\n"); return;}
-    icm_obj->base_p_obs.resize(n);
-    icm_obj->etas.resize(n);
-    icm_obj->expEtas.resize(n);
-    icm_obj->w.resize(n);
-    	
-	icm_obj->intercept = 0.0;
-	
-    for(int i = 0; i < n; i++){
-        icm_obj->etas[i]       = 0;
-        icm_obj->expEtas[i]    = 1;
-        icm_obj->base_p_obs[i] = 0;
-        icm_obj->w[i]          = REAL(R_w)[i];
+
+    Rcpp::IntegerVector strata(R_strata);
+    int nS = strata[0];
+    icm_obj->n_strata = nS;
+    // check inputs consistent for # strata
+    if(Rf_length(Rlind) != Rf_length(Rrind)){
+        Rprintf("length of Rlind and Rrind not equal\n");
+        return;
     }
+    if(Rf_length(Rlind) != Rf_length(R_w)){
+        Rprintf("length of Rlind and R_w not equal\n");
+        return;
+    }
+    if(Rf_length(Rlind) != Rf_length(RCovars)){
+        Rprintf("length of Rlind and RCovars not equal\n");
+        return;
+    }
+
+    icm_obj->base_p_obs.resize(nS);
+    icm_obj->etas.resize(nS);
+    icm_obj->expEtas.resize(nS);
+    icm_obj->w.resize(nS);
+    icm_obj->intercept.resize(nS);
+    icm_obj->covars.resize(nS);
+
+    int reg_k;
+
+    for(int s = 0; s < icm_obj->n_strata; s++){
+        int n = Rf_length(VECTOR_ELT(Rlind, s));
+        if(n != Rf_length(VECTOR_ELT(Rrind, s))){Rprintf("length of Rlind and Rrind not equal\n"); return;}
+
+        icm_obj->base_p_obs[s].resize(n);
+        icm_obj->etas[s].resize(n);
+        icm_obj->expEtas[s].resize(n);
+        icm_obj->w[s].resize(n);
+
+        icm_obj->intercept[s] = 0.0;
+
+        for(int i = 0; i < n; i++){
+            icm_obj->etas[s][i]       = 0;
+            icm_obj->expEtas[s][i]    = 1;
+            icm_obj->base_p_obs[s][i] = 0;
+            icm_obj->w[s][i]          = REAL(VECTOR_ELT(R_w,s))[i];
+        }
+
+        copyRmatrix_intoEigen(VECTOR_ELT(RCovars, s), icm_obj->covars[s]);
     
-    copyRmatrix_intoEigen(RCovars, icm_obj->covars);
-    int reg_k = icm_obj->covars.cols();
-    if(reg_k == 0) icm_obj->hasCovars = false; else icm_obj->hasCovars = true;
-    if(reg_k > 0){
-        if(n != icm_obj->covars.rows()) {Rprintf("covar rows not equal to n!\n"); return;}
+        int reg_k_s = icm_obj->covars[s].cols();
+        if (s == 0) {
+            reg_k = reg_k_s;
+            if(reg_k == 0) icm_obj->hasCovars = false; else icm_obj->hasCovars = true;
+        } else {
+            if (reg_k != reg_k_s) {
+                Rprintf("Covariates have different number of columns across strata!\n");
+                return;
+            }
+        }
+        if(reg_k_s > 0){
+            if(n != icm_obj->covars[s].rows()) {Rprintf("covar rows not equal to n!\n"); return;}
+        }
     }
     icm_obj->reg_d1.resize(reg_k);
     icm_obj->reg_d2.resize(reg_k, reg_k);
@@ -116,79 +167,107 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w,
     double* regParPtr = REAL(R_RegPars);
     for(int i = 0; i < reg_k; i++){ icm_obj->reg_par[i] = regParPtr[i]; }
     
-    int maxInd = 0;
-    for(int i = 0; i < n; i++){
-        maxInd = max(maxInd, INTEGER(Rrind)[i]);
-    }
 
-    icm_obj->baseCH.resize(maxInd + 2);
-    for(int i = 0; i <= maxInd; i++){ icm_obj->baseCH[i] = R_NegInf; }
-    icm_obj->baseCH[maxInd+1] = R_PosInf;
-    icm_obj->baseS.resize(maxInd + 2);
-    icm_obj->baseS[0] = 1.0;
-    icm_obj->baseS[maxInd+1] = 0;
-    int this_l, this_r;
-    icm_obj->obs_inf.resize(n);
-    icm_obj->node_inf.resize(maxInd + 2);
+    icm_obj->baseCH.resize(nS);
+    icm_obj->backupCH.resize(nS);
+    icm_obj->baseS.resize(nS);
+    icm_obj->baseP.resize(nS);
+    icm_obj->baseP_backup.resize(nS);
     
-    for(int i = 0; i < n; i++){
-        this_l = INTEGER(Rlind)[i];
-        this_r = INTEGER(Rrind)[i];
-        icm_obj->obs_inf[i].l = this_l;
-        icm_obj->obs_inf[i].r = this_r;
-        icm_obj->node_inf[this_l].l.push_back(i);
-        icm_obj->node_inf[this_r + 1].r.push_back(i);
+    icm_obj->obs_inf.resize(nS);
+    icm_obj->node_inf.resize(nS);
+    icm_obj->usedVec.resize(nS);
+    icm_obj->dob_dp_both.resize(nS);
+    icm_obj->dob_dp_rightOnly.resize(nS);
+
+    icm_obj->base_p_2ndDerv.resize(nS);
+    icm_obj->base_p_derv.resize(nS);
+    icm_obj->base_p_derv2.resize(nS);
+    icm_obj->prop_p.resize(nS);
+
+    for(int s = 0; s < nS; s++){
+        int n = Rf_length(VECTOR_ELT(Rrind, s));
+        int maxInd = 0;
+        for(int i = 0; i < n; i++){
+            maxInd = max(maxInd, INTEGER(VECTOR_ELT(Rrind, s))[i]);
+        }
+
+        icm_obj->baseCH[s].resize(maxInd + 2);
+        
+
+        for(int i = 0; i <= maxInd; i++){ 
+            icm_obj->baseCH[s][i] = R_NegInf; 
+        }
+        icm_obj->baseCH[s][maxInd+1] = R_PosInf;
+        icm_obj->baseS[s].resize(maxInd + 2);
+        icm_obj->baseS[s][0] = 1.0;
+        icm_obj->baseS[s][maxInd+1] = 0;
+        int this_l, this_r;
+
+        icm_obj->obs_inf[s].resize(n);
+        icm_obj->node_inf[s].resize(maxInd + 2);
+
+        for(int i = 0; i < n; i++){
+            this_l = INTEGER(VECTOR_ELT(Rlind, s))[i];
+            this_r = INTEGER(VECTOR_ELT(Rrind, s))[i];
+            icm_obj->obs_inf[s][i].l = this_l;
+            icm_obj->obs_inf[s][i].r = this_r;
+            icm_obj->node_inf[s][this_l].l.push_back(i);
+            icm_obj->node_inf[s][this_r + 1].r.push_back(i);
+        }
+
+        double stepSize = -1.0/(1.0 + icm_obj->baseS[s].size() );
+        double curVal = 1.0;
+
+        for(int i = 1; i < (maxInd+1); i++){
+        	curVal += stepSize;
+            icm_obj->baseS[s][i] = curVal;
+        }
+
+        icm_obj->baseS_2_baseCH(s);     //TURN OFF IF WANT TO SWICH TO CH START
+
+
+        icm_obj->usedVec[s].resize(n);
+        for(int i = 0; i < n; i++){icm_obj->usedVec[s][i] = false;}
     }
-    
-    double stepSize = -1.0/(1.0 + icm_obj->baseS.size() );
-    double curVal = 1.0;
-    
-    for(int i = 1; i < (maxInd+1); i++){
-    	curVal += stepSize;
-        icm_obj->baseS[i] = curVal;
-    }
-    
-    icm_obj->baseS_2_baseCH();     //TURN OFF IF WANT TO SWICH TO CH START
-    
+                
     icm_obj->startGD = false;
     icm_obj->failedGA_counts = 0;
     icm_obj->iter = 0;
     icm_obj->numBaselineIts = 5;
     
-    icm_obj->usedVec.resize(n);
-    for(int i = 0; i < n; i++){icm_obj->usedVec[i] = false;}
 }
 
 
 
 /*      OPTIMIZATION TOOLS      */
-void icm_Abst::numericBaseDervsOne(int raw_ind, vector<double> &dvec){
+void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
     dvec.resize(2);
     dvec[0] = 0;
     dvec[1] = 0;
-    if(raw_ind <= 0 || raw_ind >= (baseCH.size()- 1)){Rprintf("warning: inappropriate choice of ind for numericBaseDervs ind = %d\n", raw_ind); return;}
+    if(raw_ind <= 0 || raw_ind >= (baseCH[s].size()- 1)){Rprintf("warning: inappropriate choice of ind for numericBaseDervs ind = %d\n", raw_ind); return;}
     
     h = h / 25.0;
     
-    baseCH[raw_ind] += h;
-    double llk_h = par_llk(raw_ind);
-    baseCH[raw_ind] -= 2*h;
-    double llk_l = par_llk(raw_ind);
-    baseCH[raw_ind] += h;
-    double llk_st = par_llk(raw_ind);
+    baseCH[s][raw_ind] += h;
+    double llk_h = par_llk(s, raw_ind);
+    baseCH[s][raw_ind] -= 2*h;
+    double llk_l = par_llk(s, raw_ind);
+    baseCH[s][raw_ind] += h;
+    double llk_st = par_llk(s, raw_ind);
     
     if(llk_l == R_NegInf){
     	llk_l = llk_st;
-    	baseCH[raw_ind] += h/2.0;
-    	llk_st = par_llk(raw_ind);
-    	baseCH[raw_ind] -= h/2.0;
+    	baseCH[s][raw_ind] += h/2.0;
+    	llk_st = par_llk(s, raw_ind);
+    	baseCH[s][raw_ind] -= h/2.0;
     }
     
     if(llk_h == R_NegInf){
     	llk_h = llk_st;
-    	baseCH[raw_ind] -= h/2.0;
-    	llk_st = par_llk(raw_ind);
-    	baseCH[raw_ind] += h/2.0;
+    	baseCH[s][raw_ind] -= h/2.0;
+    	llk_st = par_llk(s, raw_ind);
+    	baseCH[s][raw_ind] += h/2.0;
     }
     
     dvec[0] = (llk_h - llk_l)/(2.0*h);
@@ -197,12 +276,12 @@ void icm_Abst::numericBaseDervsOne(int raw_ind, vector<double> &dvec){
     if(dvec[1] == R_NegInf || ISNAN(dvec[1]) ){
         h = h/100.0;
         
-        baseCH[raw_ind] += h;
-        double llk_h = par_llk(raw_ind);
-        baseCH[raw_ind] -= 2*h;
-        double llk_l = par_llk(raw_ind);
-        baseCH[raw_ind] += h;
-        double llk_st = par_llk(raw_ind);
+        baseCH[s][raw_ind] += h;
+        double llk_h = par_llk(s, raw_ind);
+        baseCH[s][raw_ind] -= 2*h;
+        double llk_l = par_llk(s, raw_ind);
+        baseCH[s][raw_ind] += h;
+        double llk_st = par_llk(s, raw_ind);
         
         dvec[0] = (llk_h - llk_l)/(2.0*h);
         dvec[1] = (llk_h + llk_l - 2.0 * llk_st) / (h * h);
@@ -213,25 +292,25 @@ void icm_Abst::numericBaseDervsOne(int raw_ind, vector<double> &dvec){
     h = h * 25.0;
 }
 
-void icm_Abst::numericBaseDervsAllAct(vector<double> &d1, vector<double> &d2){
-    int k = baseCH.size();
+void icm_Abst::numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2){
+    int k = baseCH[s].size();
     d1.resize(k);
     d2.resize(k);
     vector<double> ind_dervs(2);
     for(int i = 1; i < (k-1); i++){
-        numericBaseDervsOne(i, ind_dervs);
+        numericBaseDervsOne(s, i, ind_dervs);
         d1[i] = ind_dervs[0];
         d2[i] = ind_dervs[1];
     }
 }
 
-void icm_Abst::numericBaseDervsAllRaw(vector<double> &d1, vector<double> &d2){
-    int k = baseCH.size() - 2;
+void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2){
+    int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
     vector<double> ind_dervs(2);
     for(int i = 0; i < k; i++){
-        numericBaseDervsOne(i + 1, ind_dervs);
+        numericBaseDervsOne(s, i + 1, ind_dervs);
         d1[i] = ind_dervs[0];
         d2[i] = ind_dervs[1];
     }
@@ -239,18 +318,26 @@ void icm_Abst::numericBaseDervsAllRaw(vector<double> &d1, vector<double> &d2){
 
  
 void icm_Abst::icm_step(){
-    backupCH = baseCH;
-    double llk_st = sum_llk();
-    
-    vector<double> d1;
-    vector<double> d2;
-    numericBaseDervsAllRaw(d1, d2);
-    int thisSize = d1.size();
-    for(int i = 0; i < thisSize; i ++){
-        if(d2[i] == R_NegInf){d2[i] = -almost_inf;}
-        if(ISNAN(d2[i]))    {
-        //	Rprintf("warning: d2 isnan! \n");
-        	baseCH = backupCH;
+    for(int s = 0; s < n_strata; s++){
+        icm_step_s(s);
+    }
+}
+
+void icm_Abst::icm_step_s(int s){
+        backupCH[s] = baseCH[s];
+        double llk_st = sum_llk(s);
+        
+        vector<double> d1;
+        vector<double> d2;
+        numericBaseDervsAllRaw(s, d1, d2);
+        
+        int thisSize = d1.size();
+
+        for(int i = 0; i < thisSize; i ++){
+            if(d2[i] == R_NegInf){d2[i] = -almost_inf;}
+            if(ISNAN(d2[i]))    {
+            //	Rprintf("warning: d2 isnan! \n");
+        	    baseCH[s] = backupCH[s];
         	return;
         }
         if(d2[i] >= 0) {
@@ -271,31 +358,31 @@ void icm_Abst::icm_step(){
     }
     vector<double> x(d1.size());
     int x_k = x.size();
-    int baseCH_k = baseCH.size();
+    int baseCH_k = baseCH[s].size();
     if(x_k != baseCH_k - 2){Rprintf("warning: x.size()! = actIndex.size()\n"); return;}
-    thisSize = baseCH.size() - 2;
-    for(int i = 0; i < thisSize; i++){x[i] = baseCH[i + 1];}
+    thisSize = baseCH[s].size() - 2;
+    for(int i = 0; i < thisSize; i++){x[i] = baseCH[s][i + 1];}
     vector<double> prop(d1.size());
-    
-    pavaForOptim(d1, d2, x, prop);
-    
-    icm_addPar(prop);
-    checkCH();        
 
-    double llk_new = sum_llk();
+    pavaForOptim(d1, d2, x, prop);
+
+    icm_addPar(s, prop);
+    checkCH(s);
+
+    double llk_new = sum_llk(s);
     mult_vec(-1.0, prop);
     int tries = 0;
     while(llk_st > llk_new && tries < 5){
         tries++;
         mult_vec(0.5, prop);
-        icm_addPar(prop);
-        checkCH();        
+        icm_addPar(s, prop);
+        checkCH(s);        
 
-        llk_new = sum_llk();
+        llk_new = sum_llk(s);
     }
     if(llk_new < llk_st){
-        baseCH = backupCH;
-        llk_new = sum_llk();
+        baseCH[s] = backupCH[s];
+        llk_new = sum_llk(s);
         
         int numNAs = 0;
         double sumAbsProp = 0;
@@ -320,43 +407,7 @@ void icm_Abst::icm_step(){
 
 void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
     int k = reg_par.size();
-    int n = etas.size();
-    
-    Eigen::VectorXd l_cont(n);
-    Eigen::VectorXd r_cont(n);
-    Eigen::VectorXd totCont(n);
 
-    Eigen::VectorXd l_cont2(n);
-    Eigen::VectorXd r_cont2(n);
-    Eigen::VectorXd totCont2(n);
-    
-    int lind, rind;
-    double l_ch, r_ch, eta, pob, log_p;
-    for(int i = 0; i < n; i++){
-        l_cont[i]  = 0;
-        r_cont[i]  = 0;
-        l_cont2[i] = 0;
-        r_cont2[i] = 0;
-
-        lind = obs_inf[i].l;
-        rind = obs_inf[i].r;
-        pob  = obs_inf[i].pob;
-        log_p = log(pob);
-        l_ch = baseCH[lind];
-        r_ch = baseCH[rind + 1];
-        eta  = etas[i];
-        if(l_ch > R_NegInf){
-            l_cont[i]  = reg_d1_lnk(l_ch, eta, log_p);
-            l_cont2[i] = reg_d2_lnk(l_ch, eta, log_p);
-        }
-        if(r_ch < R_PosInf){
-            r_cont[i]  = -reg_d1_lnk(r_ch, eta, log_p);
-            r_cont2[i] = -reg_d2_lnk(r_ch, eta, log_p);
-        }
-        totCont[i] = l_cont[i] + r_cont[i];
-        totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
-    }
-    
     hess.resize(k, k);
     d1.resize(k);
     for(int i = 0; i < k; i++){
@@ -367,26 +418,66 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
         }
     }
 
-    double this_covar;
-    double this_w;
-    double this_w_covar;
-    double this_totCont;
-    double this_totCont2;
-    for(int i = 0; i < n; i++){
-        this_w = w[i];
-        this_totCont = totCont[i];
-        this_totCont2 = totCont2[i];
-        for(int a = 0; a < k; a++){
-            this_covar = covars(i,a);
-            this_w_covar = this_w * this_covar;
-            d1[a] += this_w_covar * this_totCont;
-            if(useFullHess){
-                for(int b = 0; b < a; b++){
-                    hess(a,b) += this_w_covar * covars(i,b) * this_totCont2;
-                    hess(b,a) = hess(a,b);
-                }
+    for(int s = 0; s < n_strata; s++){
+        int n = etas[s].size();
+    
+        Eigen::VectorXd l_cont(n);
+        Eigen::VectorXd r_cont(n);
+        Eigen::VectorXd totCont(n);
+
+        Eigen::VectorXd l_cont2(n);
+        Eigen::VectorXd r_cont2(n);
+        Eigen::VectorXd totCont2(n);
+
+
+        int lind, rind;
+        double l_ch, r_ch, eta, pob, log_p;
+        for(int i = 0; i < n; i++){
+            l_cont[i]  = 0;
+            r_cont[i]  = 0;
+            l_cont2[i] = 0;
+            r_cont2[i] = 0;
+
+            lind = obs_inf[s][i].l;
+            rind = obs_inf[s][i].r;
+            pob  = obs_inf[s][i].pob;
+            log_p = log(pob);
+            l_ch = baseCH[s][lind];
+            r_ch = baseCH[s][rind + 1];
+            eta  = etas[s][i];
+            if(l_ch > R_NegInf){
+                l_cont[i]  = reg_d1_lnk(l_ch, eta, log_p);
+                l_cont2[i] = reg_d2_lnk(l_ch, eta, log_p);
             }
-            hess(a,a) += this_w_covar * this_covar * this_totCont2;
+            if(r_ch < R_PosInf){
+                r_cont[i]  = -reg_d1_lnk(r_ch, eta, log_p);
+                r_cont2[i] = -reg_d2_lnk(r_ch, eta, log_p);
+            }
+            totCont[i] = l_cont[i] + r_cont[i];
+            totCont2[i] = l_cont2[i] + r_cont2[i] - totCont[i] * totCont[i];
+        }
+
+        double this_covar;
+        double this_w;
+        double this_w_covar;
+        double this_totCont;
+        double this_totCont2;
+        for(int i = 0; i < n; i++){
+            this_w = w[s][i];
+            this_totCont = totCont[i];
+            this_totCont2 = totCont2[i];
+            for(int a = 0; a < k; a++){
+                this_covar = covars[s](i,a);
+                this_w_covar = this_w * this_covar;
+                d1[a] += this_w_covar * this_totCont;
+                if(useFullHess){
+                    for(int b = 0; b < a; b++){
+                        hess(a,b) += this_w_covar * covars[s](i,b) * this_totCont2;
+                        hess(b,a) = hess(a,b);
+                    }
+                }
+                hess(a,a) += this_w_covar * this_covar * this_totCont2;
+            }
         }
     }
 }
@@ -397,7 +488,7 @@ void icm_Abst::calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1){
 void icm_Abst::covar_nr_step(){
     int k = reg_par.size();
     calcAnalyticRegDervs(reg_d2, reg_d1);
-    double lk_0 = sum_llk();
+    double lk_0 = sum_llk_all();
 
 /*    for(int i = 0; i < k; i++){
         if(reg_d2[i] >= -0.0000001 || ISNAN(reg_d2[i])){
@@ -426,20 +517,20 @@ void icm_Abst::covar_nr_step(){
     reg_par += propVec;
     propVec *= -1;
     update_etas();
-    double lk_new = sum_llk();
+    double lk_new = sum_llk_all();
     while(lk_new < lk_0 && tries < 10){
         tries++;
         propVec *= 0.5;
         reg_par += propVec;
         update_etas();
-        lk_new = sum_llk();
+        lk_new = sum_llk_all();
     }
 }
 
 
 /*      CALLING ALGORITHM FROM R     */
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
- 			  SEXP R_w, SEXP R_use_GD, SEXP R_maxiter,
+ 			  SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
  			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
  			  SEXP R_initialRegVals){
     icm_Abst* optObj;
@@ -453,7 +544,7 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     }
     else { Rprintf("fit type not supported\n");return(R_NilValue);}
     optObj->updateCovars = LOGICAL(R_updateCovars)[0] == TRUE;
-    setup_icm(Rlind, Rrind, Rcovars, R_w, R_initialRegVals, optObj);
+    setup_icm(Rlind, Rrind, Rcovars, R_w, R_strata, R_initialRegVals, optObj);
     
     optObj->useFullHess = LOGICAL(R_useFullHess)[0] == TRUE;
     
@@ -464,21 +555,31 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     
     double llk_new = optObj->run(maxIter, tol, useGD, baselineUpdates);
     
-    vector<double> p_hat;
-	
+    vector<vector<double>> p_hat;
+    p_hat.resize(optObj->n_strata);
 	optObj->recenterBCH();
 	
-    cumhaz2p_hat(optObj->baseCH, p_hat);
+    for(int s = 0; s < optObj->n_strata; s++){
+        cumhaz2p_hat(optObj->baseCH[s], p_hat[s]);
+    }
+    
     
     
     SEXP ans = PROTECT(Rf_allocVector(VECSXP, 5));
-    SEXP R_pans = PROTECT(Rf_allocVector(REALSXP,p_hat.size()));
+    SEXP R_pans = PROTECT(Rf_allocVector(VECSXP,p_hat.size()));
     SEXP R_coef = PROTECT(Rf_allocVector(REALSXP, optObj->reg_par.size()));
     SEXP R_fnl_llk = PROTECT(Rf_allocVector(REALSXP, 1));
     SEXP R_its = PROTECT(Rf_allocVector(REALSXP, 1));
     SEXP R_score = PROTECT(Rf_allocVector(REALSXP, optObj->reg_par.size()));
-    int phat_size = p_hat.size();
-    for(int i = 0; i < phat_size; i++){ REAL(R_pans)[i] = p_hat[i]; }
+
+    for (size_t i = 0; i < p_hat.size(); ++i) {
+        const vector<double>& inner = p_hat[i];
+        SEXP inner_vec = PROTECT(Rf_allocVector(REALSXP, inner.size()));
+        std::copy(inner.begin(), inner.end(), REAL(inner_vec));
+        SET_VECTOR_ELT(R_pans, i, inner_vec);
+        UNPROTECT(1); // unprotect inner_vec after assigning to list
+    }
+
     for(int i = 0; i < optObj->reg_par.size(); i++){
         REAL(R_coef)[i] = optObj->reg_par[i];
         REAL(R_score)[i] = optObj->reg_d1[i];
@@ -509,11 +610,11 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
 
 }
 
-void icm_Abst::checkCH(){
-	int k = baseCH.size();
+void icm_Abst::checkCH(int s){
+	int k = baseCH[s].size();
 	for(int i = 1; i < k; i++){
-		if(baseCH[i] < baseCH[i-1]){
-			baseCH[i] = baseCH[i-1]; 
+		if(baseCH[s][i] < baseCH[s][i-1]){
+			baseCH[s][i] = baseCH[s][i-1]; 
 		}
 	}
 }
@@ -522,7 +623,7 @@ double icm_Abst::run(int maxIter, double tol, bool useGD, int baselineUpdates){
 	iter = 0;
 	bool metOnce = false;
 	double llk_old = R_NegInf;
-	double llk_new = sum_llk();
+	double llk_new = sum_llk_all();
 
 	bool regNon0 = false;
 	int reg_k = reg_par.size();
@@ -549,7 +650,7 @@ double icm_Abst::run(int maxIter, double tol, bool useGD, int baselineUpdates){
             if(useGD){ gradientDescent_step(); }
         }
 			
-	    llk_new = sum_llk();
+	    llk_new = sum_llk_all();
 	    if(llk_new - llk_old > tol){metOnce = false;}
 	    if(metOnce == false){
 	    	if(llk_new - llk_old <= tol){
