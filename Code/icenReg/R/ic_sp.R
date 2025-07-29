@@ -4,6 +4,7 @@
 #' @param data dataset
 #' @param model What type of model to fit. Current choices are "\code{ph}" (Cox PH) or "\code{po}" (proportional odds)
 #' @param weights Vector of case weights. Not standardized; see details
+#' @param strata Vector of identifiers for strata. Will be coerced to a factor.
 #' @param bs_samples Number of bootstrap samples used for estimation of standard errors 
 #' @param useMCores Should multiple cores be used for bootstrap sample? Does not register cluster (see example)
 #' @param B Should intervals be open or closed? See details.
@@ -87,7 +88,7 @@
 #' Anderson-Bergman, C. (preprint) Revisiting the iterative convex minorant algorithm for interval censored survival regression models
 #' @export
 ic_sp <- function(formula, data, model = 'ph', 
-                  weights = NULL, bs_samples = 0, useMCores = F, 
+                  weights = NULL, strata = NULL, bs_samples = 0, useMCores = F, 
                   B = c(0,1), 
                   controls = makeCtrls_icsp() ){
   recenterCovars = TRUE
@@ -113,12 +114,13 @@ ic_sp <- function(formula, data, model = 'ph',
   yMat <- adjustIntervals(B, yMat)
 
   checkMatrix(x)
-  
+
   if(model == 'ph')	callText = 'ic_ph'
   else if(model == 'po')	callText = 'ic_po'
   else stop('invalid choice of model. Current optios are "ph" (cox ph) or "po" (proportional odds)')
   
   weights <- checkWeights(weights, yMat)	
+  strata <- checkStrata(strata, yMat)
   if(length(x) == 0) recenterCovars = FALSE
   
   if(!is.null(controls$regStart)) regStart <- controls$regStart
@@ -138,11 +140,13 @@ ic_sp <- function(formula, data, model = 'ph',
   covarOffset <- icColMeans(x)
   x <- t(t(x) - covarOffset)
 
-  fitInfo <- fit_ICPH(yMat, x, callText, weights, other_info)
+  fitInfo <- fit_ICPH(yMat, x, callText, weights, strata, other_info)
   dataEnv <- list()
   dataEnv[['x']] <- as.matrix(x, nrow = nrow(yMat))
   if(ncol(dataEnv$x) == 1) colnames(dataEnv[['x']]) <- xNames
   dataEnv[['y']] <- yMat
+  dataEnv[['strata']] <- strata
+  dataEnv[['weights']] <- weights
   seeds = as.integer( runif(bs_samples, 0, 2^31) )
   bsMat <- numeric()
   if(useMCores) `%mydo%` <- `%dopar%`
@@ -187,6 +191,7 @@ ic_sp <- function(formula, data, model = 'ph',
   fitInfo$formula = formula
   fitInfo$.dataEnv <- new.env()
   if(!missing(data)){ fitInfo$.dataEnv$data = data }
+  list2env(dataEnv, envir = fitInfo$.dataEnv)
   fitInfo$par = 'semi-parametric'
   fitInfo$model = model
   fitInfo$reg_pars <- fitInfo$coefficients
@@ -195,6 +200,7 @@ ic_sp <- function(formula, data, model = 'ph',
   if(fitInfo$iterations == controls$maxIter){
     warning('Maximum iterations reached in ic_sp.')
   }
+  fitInfo$other_info <- other_info
   return(fitInfo)
 }
 
@@ -228,7 +234,7 @@ makeCtrls_icsp <- function(useGA = T, maxIter = 10000, baseUpdates = 5,
 }
 
 
-fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
+fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, strata, other_info){
   if(any(obsMat[,1] > obsMat[,2])) 
     stop("left side of response interval greater than right side. This is impossible.")
   useGA <- other_info$useGA
@@ -239,9 +245,10 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   regStart <- other_info$regStart
   # recenterCovars = FALSE
   # if(getNumCovars(covars) == 0)	recenterCovars <- FALSE
-  mi_info <- findMaximalIntersections(obsMat[,1], obsMat[,2])
-  k = length(mi_info[['mi_l']])
-  covars <- as.matrix(covars)
+  mi_info <- by(obsMat, strata, function(x) findMaximalIntersections(x[,1], x[,2]))
+  
+  covars_list <- lapply(split(seq_len(nrow(obsMat)), strata), function(i) covars[i, , drop = FALSE])
+  weights <- split(as.numeric(weights), strata)
   if(callText == 'ic_ph'){fitType = as.integer(1)}
   else if(callText == 'ic_po'){fitType = as.integer(2)}
   else {stop('callText not recognized in fit_ICPH')}
@@ -252,11 +259,24 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   #   regStart <- solve(pca_info$rotation, (regStart * pca_info$scale) )
   # }
   
-  c_ans <- .Call('ic_sp_ch', mi_info$l_inds, mi_info$r_inds, 
-                 covars, fitType, as.numeric(weights), useGA, 
-                 as.integer(maxIter), as.integer(baselineUpdates),
-                 as.logical(useFullHess), as.logical(updateCovars),
-                 as.double(regStart))  
+  linds <- lapply(mi_info, function(x) x$l_inds)
+  rinds <- lapply(mi_info, function(x) x$r_inds)
+
+  c_ans <- .Call(
+    'ic_sp_ch',
+    linds,
+    rinds,
+    covars_list, # list covariates of each strata
+    fitType,
+    weights, # list of weights
+    nlevels(strata), # number of strata
+    useGA, 
+    as.integer(maxIter),
+    as.integer(baselineUpdates),
+    as.logical(useFullHess),
+    as.logical(updateCovars),
+    as.double(regStart)
+  )  
   names(c_ans) <- c('p_hat', 'coefficients', 'llk', 'iterations', 'score')
   myFit <- new(callText)
   myFit$p_hat <- c_ans$p_hat
@@ -264,8 +284,8 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, other_info){
   myFit$llk <- c_ans$llk
   myFit$iterations <- c_ans$iterations
   myFit$score <- c_ans$score
-  myFit[['T_bull_Intervals']] <- rbind(mi_info[['mi_l']], mi_info[['mi_r']])
-  myFit$p_hat <- myFit$p_hat / sum(myFit$p_hat) 
+  myFit[['T_bull_Intervals']] <- lapply(mi_info, function(mi) rbind(mi[['mi_l']], mi[['mi_r']]))
+  myFit$p_hat <- lapply(myFit$p_hat, function(p) p / sum(p)) 
   # if(recenterCovars == TRUE){
   #   myFit$pca_coefs <- myFit$coefficients
   #   myFit$pca_info <- pca_info
