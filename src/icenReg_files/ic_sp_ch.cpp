@@ -60,9 +60,9 @@ void icm_Abst::update_etas(){
     for(int s = 0; s < n_strata; s++){
         etas[s] = covars[s] * reg_par;
         for(int i = 0; i < etas[s].size(); i++){
-		    etas[s][i] += intercept[s];
+            etas[s][i] += intercept[s];
             expEtas[s][i] = exp(etas[s][i] );
-	    }
+        }
     }
 }
 
@@ -73,9 +73,9 @@ void icm_Abst::update_etas(){
 void icm_Abst::recenterBCH(){
     for(int s = 0; s < n_strata; s++){
         int k = baseCH[s].size();
-	    for(int i = 1; i < (k-1); i++){
-    		baseCH[s][i] += intercept[s];
-    	} 
+        for(int i = 1; i < (k-1); i++){
+            baseCH[s][i] += intercept[s];
+        } 
     }
 }
 
@@ -100,7 +100,7 @@ void icm_Abst::icm_addPar(int s, vector<double> &delta){
 
 /*      INITIALIZATION TOOLS    */
 void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
-				SEXP R_RegPars, icm_Abst* icm_obj){
+                SEXP R_RegPars, icm_Abst* icm_obj){
     icm_obj->h = 0.0001;
     icm_obj->almost_inf = 1.0/icm_obj->h;
 
@@ -127,6 +127,7 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
     icm_obj->w.resize(nS);
     icm_obj->intercept.resize(nS);
     icm_obj->covars.resize(nS);
+    icm_obj->adFuns.resize(nS);
 
     int reg_k;
 
@@ -224,7 +225,7 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
         double curVal = 1.0;
 
         for(int i = 1; i < (maxInd+1); i++){
-        	curVal += stepSize;
+            curVal += stepSize;
             icm_obj->baseS[s][i] = curVal;
         }
 
@@ -249,6 +250,7 @@ void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
     dvec.resize(2);
     dvec[0] = 0;
     dvec[1] = 0;
+    dvec[2] = 0;
     if(raw_ind <= 0 || raw_ind >= (baseCH[s].size()- 1)){Rprintf("warning: inappropriate choice of ind for numericBaseDervs ind = %d\n", raw_ind); return;}
     
     h = h / 25.0;
@@ -261,21 +263,22 @@ void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
     double llk_st = par_llk(s, raw_ind);
     
     if(llk_l == R_NegInf){
-    	llk_l = llk_st;
-    	baseCH[s][raw_ind] += h/2.0;
-    	llk_st = par_llk(s, raw_ind);
-    	baseCH[s][raw_ind] -= h/2.0;
+        llk_l = llk_st;
+        baseCH[s][raw_ind] += h/2.0;
+        llk_st = par_llk(s, raw_ind);
+        baseCH[s][raw_ind] -= h/2.0;
     }
     
     if(llk_h == R_NegInf){
-    	llk_h = llk_st;
-    	baseCH[s][raw_ind] -= h/2.0;
-    	llk_st = par_llk(s, raw_ind);
-    	baseCH[s][raw_ind] += h/2.0;
+        llk_h = llk_st;
+        baseCH[s][raw_ind] -= h/2.0;
+        llk_st = par_llk(s, raw_ind);
+        baseCH[s][raw_ind] += h/2.0;
     }
     
     dvec[0] = (llk_h - llk_l)/(2.0*h);
     dvec[1] = (llk_h + llk_l - 2.0 * llk_st) / (h * h);
+    dvec[2] = llk_st;
         
     if(dvec[1] == R_NegInf || ISNAN(dvec[1]) ){
         h = h/100.0;
@@ -289,7 +292,7 @@ void icm_Abst::numericBaseDervsOne(int s, int raw_ind, vector<double> &dvec){
         
         dvec[0] = (llk_h - llk_l)/(2.0*h);
         dvec[1] = (llk_h + llk_l - 2.0 * llk_st) / (h * h);
-        
+        dvec[2] = llk_st;
         h *=100.0;
     }
     
@@ -308,91 +311,160 @@ void icm_Abst::numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> 
     }
 }
 
-void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2){
+void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
     int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
-    vector<double> ind_dervs(2);
+    d0.resize(k);
+    double llk_full = sum_llk(s);
+    vector<double> ind_dervs(3);
     for(int i = 0; i < k; i++){
         numericBaseDervsOne(s, i + 1, ind_dervs);
         d1[i] = ind_dervs[0];
         d2[i] = ind_dervs[1];
+        d0[i] = ind_dervs[2];
     }
 }
 
-
-void icm_Abst::autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2){
+void icm_Abst::autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
     int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
-
-    vector<AD<double>> adLL(1); 
-    vector<AD<double>> adCH(k);
-    vector<double> thisCH(k);
-    for(int i = 0; i < k; i++){
+    d0.resize(k);
+    // 1. Set up AD variables for all internal baseline hazards
+    std::vector<CppAD::AD<double>> adCH(k);
+    std::vector<double> thisCH(k);
+    for(int i = 0; i < k; ++i) {
         thisCH[i] = baseCH[s][i + 1];
-        adCH[i] = AD<double>(baseCH[s][i + 1]);
+        adCH[i] = thisCH[i];
     }
     CppAD::Independent(adCH);
-    // write likelihood function for this strata using supplied CH
-    adLL[0] = 0.0;
-    AD<double> chl, chr, temp_ll;
+
+    // 2. Build partial likelihood: sum over all observations, using AD variables for internal hazards
+    CppAD::AD<double> llk = 0.0;
     int n = obs_inf[s].size();
-    for(int i = 0; i < n; i++){
-        temp_ll = 0;
+    for(int i = 0; i < n; ++i) {
+        int l = obs_inf[s][i].l;
+        int r = obs_inf[s][i].r;
+        double eta = etas[s][i];
+        CppAD::AD<double> chl = (l == 0) ? CppAD::AD<double>(baseCH[s][l]) : adCH[l - 1];
+        CppAD::AD<double> chr = (r + 1 == k + 1) ? CppAD::AD<double>(baseCH[s][r + 1]) : adCH[r];
 
-        if(obs_inf[s][i].l - 1 < 0){
-            chl = baseCH[s][obs_inf[s][i].l];
-        } else {
-            chl = adCH[obs_inf[s][i].l - 1];
-        }
-        if(chl == R_NegInf)  temp_ll += 1;
-        if(chl == R_PosInf)  temp_ll += 0;
-        
-        temp_ll += exp(-exp(chl + etas[s][i]));
-        
-        if(obs_inf[s][i].r >= k){
-            chr = baseCH[s][obs_inf[s][i].r + 1];
-        } else {
-            chr = adCH[obs_inf[s][i].r];
-        }
-        if(chr == R_NegInf)  temp_ll -= 1;
-        if(chr == R_PosInf)  temp_ll -= 0;
-        temp_ll -= exp(-exp(chr + etas[s][i]));
+        CppAD::AD<double> l_pob = CppAD::exp(-CppAD::exp(chl + eta));
+        CppAD::AD<double> r_pob = CppAD::exp(-CppAD::exp(chr + eta));
 
-        adLL[0] += log(temp_ll) * w[s][i];
+        CppAD::AD<double> zero(0.);
+        CppAD::AD<double> one(1.);
+        CppAD::AD<double> large(1e15);
+        CppAD::AD<double> tiny(1e-16);
+        CppAD::AD<double> small(-1e15);
+
+        CppAD::AD<double> left_part = CppAD::CondExpGt(chl, large, one, l_pob);
+        left_part = CppAD::CondExpLt(chl, small, zero, l_pob);
+
+        CppAD::AD<double> right_part = CppAD::CondExpGt(chr, large, one, r_pob);
+        right_part = CppAD::CondExpLt(chr, small, zero, r_pob);
+
+        CppAD::AD<double> pob = left_part - right_part;
+        // Avoid log(0) or negative pob
+        pob = CppAD::CondExpGt(pob, zero, pob, tiny);
+        llk += CppAD::log(pob) * w[s][i];
     }
 
-     CppAD::ADFun<double> ll_func(adCH, adLL);
-    // compute first derivatives
-    std::vector<double> gradient = ll_func.Jacobian(thisCH);
-    for(int i = 0; i < k; i++){
-        d1[i] = gradient[i];
-    }
+    // 3. Tape and compute derivatives
+    std::vector<CppAD::AD<double>> out(1);
+    out[0] = llk;
+    CppAD::ADFun<double> fun(adCH, out);
 
-    // compute second derivatives only on the main diagonal
-   std::vector<bool> pattern(k * k, false);
+    // 4. Get gradient and Hessian diagonal using SparseHessian (modern style)
+    std::vector<double> grad = fun.Jacobian(thisCH);
+
+    std::vector<bool> pattern(k * k, false);
     for (int i = 0; i < k; ++i) {
         pattern[i * k + i] = true;
     }
-    
     std::vector<double> w_sparse(1, 1.0);
-    // Compute the sparse Hessian diagonal (actually, all diagonal elements)
-    vector<double> sparse_diag = ll_func.SparseHessian(thisCH, w_sparse, pattern);
-    // Copy the diagonal elements to d2
-    for (int i = 0; i < k; ++i) {
-        d2[i] = sparse_diag[i * k + i];
-    }
-    // Check for NaN or Inf values in d2
-    for (int i = 0; i < k; ++i) {
-        if (std::isnan(d2[i]) || std::isinf(d2[i])) {
-            d2[i] = R_NegInf; // or some other value to indicate an error
-        }
-    }
+    std::vector<double> hess_diag = fun.SparseHessian(thisCH, w_sparse, pattern);
 
+    std::vector<double> y = fun.Forward(0, thisCH); // Ensure the function is evaluated at the current point    
+
+    for(int i = 0; i < k; ++i) {
+        d0[i] = CppAD::Value(llk);
+        d1[i] = grad[i];
+        d2[i] = hess_diag[i * k + i];
+        if (std::isnan(d2[i]) || std::isinf(d2[i])) d2[i] = R_NegInf;
+    }
 }
 
 
+// Non-vectorized autodiff: computes partial likelihood for each CH value separately
+void icm_Abst::autoBaseDervsAll2(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0) {
+    int k = baseCH[s].size() - 2;
+    d1.resize(k);
+    d2.resize(k);
+    d0.resize(k);
+
+    if (adFuns[s].size() == 0) {
+        adFuns[s].resize(k);
+        for (int param = 0; param < k; ++param) {
+            // Copy current CH values
+            std::vector<CppAD::AD<double>> adCH(1);
+            std::vector<double> thisCH(1);
+            thisCH[0] = baseCH[s][param + 1];
+            adCH[0] = thisCH[0];
+            CppAD::Independent(adCH);
+
+            // Build partial likelihood for this parameter: sum over affected observations
+            CppAD::AD<double> llk = 0.0;
+            int baseCH_idx = param + 1;
+
+            CppAD::AD<double> zero(0.);
+            CppAD::AD<double> small(1e-16);
+            // Left boundary
+            int num_l = node_inf[s][baseCH_idx].l.size();
+            for (int i = 0; i < num_l; ++i) {
+                int obs = node_inf[s][baseCH_idx].l[i];
+                CppAD::AD<double> chl = adCH[0];
+                double chr = baseCH[s][obs_inf[s][obs].r + 1];
+                double eta = etas[s][obs];
+                CppAD::AD<double> pob = CppAD::exp(-CppAD::exp(chl + eta)) - CppAD::exp(-CppAD::exp(chr + eta));
+                pob = CppAD::CondExpGt(pob, zero, pob, small);
+                llk += CppAD::log(pob) * w[s][obs];
+            }
+            // Right boundary
+            int num_r = node_inf[s][baseCH_idx].r.size();
+            for (int i = 0; i < num_r; ++i) {
+                int obs = node_inf[s][baseCH_idx].r[i];
+                double chl = baseCH[s][obs_inf[s][obs].l];
+                CppAD::AD<double> chr = adCH[0];
+                double eta = etas[s][obs];
+                CppAD::AD<double> pob = CppAD::exp(-CppAD::exp(chl + eta)) - CppAD::exp(-CppAD::exp(chr + eta));
+                pob = CppAD::CondExpGt(pob, zero, pob, small);
+                llk += CppAD::log(pob) * w[s][obs];
+            }
+
+            // Tape and compute derivatives
+            std::vector<CppAD::AD<double>> out(1);
+            out[0] = llk;
+            adFuns[s][param] = CppAD::ADFun<double>(adCH, out);
+            adFuns[s][param].optimize();
+        }
+    } 
+    
+    
+    // just reuse existing ADFuns if available
+    for(int param = 0; param < k; ++param) {
+        std::vector<double> thisCH(1);
+        thisCH[0] = baseCH[s][param + 1];
+        std::vector<double> grad = adFuns[s][param].Jacobian(thisCH);
+        std::vector<double> hess = adFuns[s][param].Hessian(thisCH, std::vector<double>{1.0});
+        std::vector<double> y = adFuns[s][param].Forward(0, thisCH);
+       // d0[param] = y[0];
+        d1[param] = grad[0];
+        d2[param] = hess[0];
+        if (std::isnan(d2[param]) || std::isinf(d2[param])) d2[param] = R_NegInf;
+    }
+}
 
 void icm_Abst::icm_step(){
     for(int s = 0; s < n_strata; s++){
@@ -406,25 +478,32 @@ void icm_Abst::icm_step_s(int s){
         
         vector<double> d1;
         vector<double> d2;
-        numericBaseDervsAllRaw(s, d1, d2);
-        
-        vector<double> ad1;
-        vector<double> ad2;
-        autoBaseDervsAll(s, ad1, ad2);
+        vector<double> d0;
 
+        if (derivMethod == 1) {
+            // Use raw numeric derivatives
+            numericBaseDervsAllRaw(s, d1, d2, d0);
+        } else if (derivMethod == 2) {
+            // Use automatic differentiation
+            autoBaseDervsAll2(s, d1, d2, d0);
+        } else if (derivMethod == 3) {
+            // Use vectorized automatic differentiation
+            autoBaseDervsAll(s, d1, d2, d0);
+        } else {
+            Rcpp::Rcout << "Invalid derivation method selected.\n";
+            return;
+        }
+     
         int thisSize = d1.size();
 
-       Rprintf("Compare Derivatives! \n");
-        for(int i = 0; i < thisSize; i ++){
-             Rcpp::Rcout << "nd: " << d2[i] << " ad: "<< ad2[i] << "\n";
-        }
+
 
         for(int i = 0; i < thisSize; i ++){
             if(d2[i] == R_NegInf){d2[i] = -almost_inf;}
             if(ISNAN(d2[i]))    {
             //	Rprintf("warning: d2 isnan! \n");
-        	    baseCH[s] = backupCH[s];
-        	return;
+                baseCH[s] = backupCH[s];
+            return;
         }
         if(d2[i] >= 0) {
             int sum_neg = 0;
@@ -615,12 +694,12 @@ void icm_Abst::covar_nr_step(){
 
 /*      CALLING ALGORITHM FROM R     */
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
- 			  SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
- 			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
- 			  SEXP R_initialRegVals){
+              SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
+              SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
+              SEXP R_initialRegVals, SEXP R_derivMethod) {
     icm_Abst* optObj;
     bool useGD = LOGICAL(R_use_GD)[0] == TRUE;
-	
+    
     if(INTEGER(fitType)[0] == 1){
         optObj = new icm_ph;
     }
@@ -632,7 +711,7 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     setup_icm(Rlind, Rrind, Rcovars, R_w, R_strata, R_initialRegVals, optObj);
     
     optObj->useFullHess = LOGICAL(R_useFullHess)[0] == TRUE;
-    
+    optObj->derivMethod = INTEGER(R_derivMethod)[0];
     
     double tol = pow(10.0, -10.0);
     int maxIter = INTEGER(R_maxiter)[0];
@@ -641,9 +720,9 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
     double llk_new = optObj->run(maxIter, tol, useGD, baselineUpdates);
     
     vector<vector<double>> p_hat; // IG changed to vector of vectors to handle multiple strata
-	p_hat.resize(optObj->n_strata);
-	optObj->recenterBCH();
-	
+    p_hat.resize(optObj->n_strata);
+    optObj->recenterBCH();
+    
     for(int s = 0; s < optObj->n_strata; s++){
         cumhaz2p_hat(optObj->baseCH[s], p_hat[s]);
     }
@@ -696,59 +775,59 @@ SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
 }
 
 void icm_Abst::checkCH(int s){
-	int k = baseCH[s].size();
-	for(int i = 1; i < k; i++){
-		if(baseCH[s][i] < baseCH[s][i-1]){
-			baseCH[s][i] = baseCH[s][i-1]; 
-		}
-	}
+    int k = baseCH[s].size();
+    for(int i = 1; i < k; i++){
+        if(baseCH[s][i] < baseCH[s][i-1]){
+            baseCH[s][i] = baseCH[s][i-1]; 
+        }
+    }
 }
 
 double icm_Abst::run(int maxIter, double tol, bool useGD, int baselineUpdates){
-	iter = 0;
-	bool metOnce = false;
-	double llk_old = R_NegInf;
-	double llk_new = sum_llk_all(); // global log-likelihood
+    iter = 0;
+    bool metOnce = false;
+    double llk_old = R_NegInf;
+    double llk_new = sum_llk_all(); // global log-likelihood
 
-	bool regNon0 = false;
-	int reg_k = reg_par.size();
-	for(int i = 0; i < reg_k; i++){
-		if(reg_par[i] != 0 ){ regNon0 = true; } 
-	}
-	
-	if(regNon0){
-		if(hasCovars){stablizeBCH();}
-		if(useGD){ gradientDescent_step();}
-		icm_step();
-		if(useGD){ gradientDescent_step();}		
-		icm_step();
-	}
-	
+    bool regNon0 = false;
+    int reg_k = reg_par.size();
+    for(int i = 0; i < reg_k; i++){
+        if(reg_par[i] != 0 ){ regNon0 = true; } 
+    }
+    
+    if(regNon0){
+        if(hasCovars){stablizeBCH();}
+        if(useGD){ gradientDescent_step();}
+        icm_step();
+        if(useGD){ gradientDescent_step();}		
+        icm_step();
+    }
+    
     while(iter < maxIter && (llk_new - llk_old) > tol){
         iter++;
         llk_old = llk_new;
         if(hasCovars && updateCovars){ covar_nr_step(); }
 
         for(int i = 0; i < baselineUpdates; i++)  {
-			if(hasCovars){stablizeBCH();}
+            if(hasCovars){stablizeBCH();}
             icm_step();
             if(useGD){ gradientDescent_step(); }
         }
-			
-	    llk_new = sum_llk_all();
-	    if(llk_new - llk_old > tol){metOnce = false;}
-	    if(metOnce == false){
-	    	if(llk_new - llk_old <= tol){
-	            metOnce = true;
-	            llk_old = llk_old - 2 * tol;
-	        }
-		}
+            
+        llk_new = sum_llk_all();
+        if(llk_new - llk_old > tol){metOnce = false;}
+        if(metOnce == false){
+            if(llk_new - llk_old <= tol){
+                metOnce = true;
+                llk_old = llk_old - 2 * tol;
+            }
+        }
  
- 	   if((llk_new - llk_old) < -0.001 ){
- 	       Rprintf("warning: likelihood decreased! difference = %f\n", llk_new - llk_old);
- 	   }
- 	}
- 	return(llk_new);
+       if((llk_new - llk_old) < -0.001 ){
+           Rprintf("warning: likelihood decreased! difference = %f\n", llk_new - llk_old);
+       }
+    }
+    return(llk_new);
 }
 
 
@@ -793,10 +872,10 @@ SEXP findMI(SEXP R_AllVals, SEXP isL, SEXP isR, SEXP lVals, SEXP rVals){
     double this_Lval, this_Rval;
     
     for(int i = 0; i < n; i++){
-    	this_Lval = clVals[i];
+        this_Lval = clVals[i];
         cl_ind[i] = findSurroundingVals(this_Lval, mi_l, mi_r, true);
         this_Rval = crVals[i];
-    	cr_ind[i] = findSurroundingVals(this_Rval, mi_l, mi_r, false);
+        cr_ind[i] = findSurroundingVals(this_Rval, mi_l, mi_r, false);
      }
     
     

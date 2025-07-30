@@ -50,13 +50,14 @@ public:
     vector<vector<obInf>> obs_inf;
     vector<vector<node_info>> node_inf;
     
-    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2);
+    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
     
     void icm_addPar(int s, vector<double> &delta);
 
     void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
     void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
-    void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2);
+    void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
+    void autoBaseDervsAll2(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
 
     
     void update_etas();
@@ -103,6 +104,8 @@ public:
     double h;
     bool hasCovars;
     bool updateCovars;
+
+    int derivMethod; // 1 = numeric, 2 = auto, 3 = auto vectorized
     
     bool startGD;
     vector<vector<double>> baseS;
@@ -139,6 +142,8 @@ public:
     
     double cal_log_obs(double s1, double s2, double eta);
     
+    vector<vector<CppAD::ADFun<double>>> adFuns;
+
     vector<vector<bool>> usedVec;
     
     double almost_inf;
@@ -264,7 +269,7 @@ extern "C" {
 SEXP ic_sp_ch(SEXP Rlind, SEXP Rrind, SEXP Rcovars, SEXP fitType,
  			  SEXP R_w, SEXP R_strata, SEXP R_use_GD, SEXP R_maxiter,
  			  SEXP R_baselineUpdates, SEXP R_useFullHess, SEXP R_updateCovars,
- 			  SEXP R_initialRegVals);
+ 			  SEXP R_initialRegVals, SEXP R_derivMethod);
     SEXP findMI(SEXP R_AllVals, SEXP isL, SEXP isR, SEXP lVals, SEXP rVals);
 }
 #endif /* defined(____ic_sp_cm__) */

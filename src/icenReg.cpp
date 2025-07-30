@@ -6,6 +6,9 @@
 //
 //
 
+#define NDEBUG 
+
+
 //#include "Eigen_local/Dense"
 #include <Eigen/Dense>
 #include <stdio.h>

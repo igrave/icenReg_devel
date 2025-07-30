@@ -140,7 +140,8 @@ ic_sp <- function(
     useFullHess = useFullHess, 
     updateCovars = controls$updateReg,
     recenterCovars = recenterCovars, 
-    regStart = regStart)  
+    regStart = regStart,
+    derivMethod = controls$derivMethod)  
     
   # Recentering covariates
   covarOffset <- icColMeans(x)
@@ -231,10 +232,10 @@ ic_sp <- function(
 #' @author Clifford Anderson-Bergman
 #' @export
 makeCtrls_icsp <- function(useGA = T, maxIter = 10000, baseUpdates = 5,
-      regStart = NULL){
+      regStart = NULL, derivMethod = 1){
   ans <- list(useGA = useGA, maxIter = maxIter, 
   baseUpdates = baseUpdates, 
-  regStart = regStart, updateReg = TRUE)
+  regStart = regStart, updateReg = TRUE, derivMethod = derivMethod)
   return(ans)
 }
         
@@ -248,6 +249,7 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, strata, other_
   useFullHess <- other_info$useFullHess
   updateCovars <- other_info$updateCovars
   regStart <- other_info$regStart
+  derivMethod <- other_info$derivMethod
   # recenterCovars = FALSE
   # if(getNumCovars(covars) == 0)	recenterCovars <- FALSE
   mi_info <- by(obsMat, strata, function(x) findMaximalIntersections(x[,1], x[,2]))
@@ -283,7 +285,8 @@ fit_ICPH <- function(obsMat, covars, callText = 'ic_ph', weights, strata, other_
     as.integer(baselineUpdates),
     as.logical(useFullHess),
     as.logical(updateCovars),
-    as.double(regStart)
+    as.double(regStart),
+    as.integer(derivMethod)
   )  
   names(c_ans) <- c('p_hat', 'coefficients', 'llk', 'iterations', 'score')
   myFit <- new(callText)
