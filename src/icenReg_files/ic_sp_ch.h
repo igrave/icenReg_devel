@@ -58,8 +58,8 @@ public:
     void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
     void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
     void autoBaseDervsAll2(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
+    void tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
 
-    
     void update_etas();
 	virtual void stablizeBCH() = 0;
     void recenterBCH();

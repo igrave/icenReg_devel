@@ -466,6 +466,48 @@ void icm_Abst::autoBaseDervsAll2(int s, vector<double> &d1, vector<double> &d2, 
     }
 }
 
+
+// TinyAD autodiff: computes partial likelihood for each CH value separately
+
+void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0) {
+    int k = baseCH[s].size() - 2;
+    d1.resize(k);
+    d2.resize(k);
+    d0.resize(k);
+    for (int param = 0; param < k; ++param) {
+        using ADouble = TinyAD::Double<1>;
+
+        ADouble x = ADouble::make_active(baseCH[s][param + 1], 0, 1);
+        ADouble  llk = 0.0;
+        
+        int baseCH_idx = param + 1;
+        // Left boundary
+        int num_l = node_inf[s][baseCH_idx].l.size();
+        for (int i = 0; i < num_l; ++i) {
+            int obs = node_inf[s][baseCH_idx].l[i];
+            double chr = baseCH[s][obs_inf[s][obs].r + 1];
+            double eta = etas[s][obs];
+            ADouble pob = exp(-exp(x + eta)) - exp(-exp(chr + eta));
+            if (pob < 1e-16)  pob = 1e-16; // Avoid log(0) 
+            llk += log(pob) * w[s][obs];
+            }
+            // Right boundary
+        int num_r = node_inf[s][baseCH_idx].r.size();
+        for (int i = 0; i < num_r; ++i) {
+            int obs = node_inf[s][baseCH_idx].r[i];
+            double chl = baseCH[s][obs_inf[s][obs].l];
+            double eta = etas[s][obs];
+            ADouble pob = exp(-exp(chl + eta)) - exp(-exp(x + eta));
+            if (pob < 1e-16)  pob = 1e-16; // Avoid log(0) 
+            llk += log(pob) * w[s][obs];
+        }
+            
+        d0[param] = llk.val;
+        d1[param] = llk.grad(0);
+        d2[param] = llk.Hess(0,0);
+    }
+}
+
 void icm_Abst::icm_step(){
     for(int s = 0; s < n_strata; s++){
         icm_step_s(s);
@@ -489,6 +531,9 @@ void icm_Abst::icm_step_s(int s){
         } else if (derivMethod == 3) {
             // Use vectorized automatic differentiation
             autoBaseDervsAll(s, d1, d2, d0);
+        } else if (derivMethod == 4) {
+            // Use TinyAD for automatic differentiation
+            tinyadBaseDervsAllRaw(s, d1, d2, d0);
         } else {
             Rcpp::Rcout << "Invalid derivation method selected.\n";
             return;
