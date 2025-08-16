@@ -56,8 +56,8 @@ public:
 
     void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
     void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
-    void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
-    void autoBaseDervsAll2(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
+    //void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
+    //void autoBaseDervsAll2(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
     void tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
 
     void update_etas();
@@ -75,6 +75,8 @@ public:
     virtual double base_d1_contr(double h, double pob, double eta) = 0; //done, not checked
     virtual double reg_d1_lnk(double ch, double xb, double log_p) = 0;
     virtual double reg_d2_lnk(double ch, double xb, double log_p) = 0;
+
+    virtual double dllk_dp_i(double s_l, double s_r, double eta, double pob,  bool left, bool right) = 0;
     
     void calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1);
     void rawDervs2ActDervs();
@@ -129,6 +131,8 @@ public:
     void calc_base_p_derv();
     double getMaxScaleSize( vector<double> &p, vector<double> &prop_p);
     void gradientDescent_step();
+    void auto_base_p_derv(int s);
+    void analytical_dobs_dp(int s);
     // void experimental_step();
     // void EM_step();
     
@@ -142,8 +146,7 @@ public:
     
     double cal_log_obs(double s1, double s2, double eta);
     
-    vector<vector<CppAD::ADFun<double>>> adFuns;
-
+    
     vector<vector<bool>> usedVec;
     
     double almost_inf;
@@ -216,6 +219,65 @@ public:
         update_etas();
 	}
 	
+    double dllk_dp_i(double s_l, double s_r, double eta, double pob, bool left, bool right){
+        // no derivative terms
+        if (!left && !right) return(0.0);
+        
+        /*
+        Possibilities:
+        sl ==1 && sr == llk_0 := 0
+        sl < 1 && sr == 0 && p in sl
+        sl < 1 && sr == 0 && p not in sl := 0
+
+        sl == 1 && sr > 0 && p in sr
+        sl == 1 && sr > 0 && p not in sr := 0
+      
+        sl < 1 && sr > 0 && p in sr, in sl
+        sl < 1 && sr > 0 && p in sr, not in sl
+        sl < 1 && sr > 0 && p not in sr, not in sl := 0
+        
+        
+        */
+        if (eta == 0.0) {
+            if (left && right) {
+                return(0.0);
+            } else if (left) {
+                return(-1.0 / s_l);
+            } else if (right) {
+                return(1.0 / (s_l - s_r));
+            } else {
+                Rcpp::Rcout << "Error in dllk_dp_i: both left and right are false!" << std::endl;
+                return(0.0);
+            }
+        }
+
+        double r_term, l_term;
+        if (right) {
+            r_term = exp(log(s_r) * (exp(eta) - 1));
+        }
+        double ans = 0;
+        if (left && right){
+            // exp(eta) * (r_term - l_term) / exp(pob)
+            l_term = exp(log(s_l) * (exp(eta) - 1));
+            //ans = exp(eta + log(r_term - l_term) - pob);
+            ans = exp(eta) * (r_term - l_term) / exp(pob);
+        } else if (left) { // but not right, can simplify
+            // exp(eta) * l_term / exp(pob)
+            // = - exp(eta) / s_l
+            ans = - exp(eta) / s_l;
+        } else if (right) { // but not left
+            // exp(eta) * r_term / exp(pob)
+            ans = exp(eta + log(r_term) - pob);
+        } else {
+            Rcpp::Rcout << "Error in dllk_dp_i: both left and right are false!" << std::endl;
+        }
+       
+        if (ISNAN(ans)) {
+            Rcpp::Rcout << "Warning: dllk_dp_i returned NaN!" << std::endl;
+            ans = 0.0;
+        }
+        return(ans);
+    }
 	
     virtual ~icm_ph(){};
 };
@@ -262,6 +324,46 @@ public:
     }
 	void stablizeBCH(){}
 	
+    double dllk_dp_i(double s_l, double s_r, double eta, double pob, bool left, bool right){
+        // no derivative terms
+        if (!left && !right) return(0.0);
+        if (eta == 0.0) {
+            if (left && right) {
+                return(0.0);
+            } else if (left) {
+                return(-1.0 / s_l);
+            } else if (right) {
+                return(1.0 / (s_l - s_r));
+            } else {
+                Rcpp::Rcout << "Error in dllk_dp_i: both left and right are false!" << std::endl;
+                return(0.0);
+            }
+        }
+        double l_term, r_term;
+        if (left) {
+            double denom = s_l * (exp(eta) - 1) + 1;
+            l_term = s_l * (1-exp(eta)) / (denom * denom) + 1 / denom;
+
+        } else {
+            l_term = 0;
+        }
+
+        if (right) {
+            double denom = s_r * (exp(eta) - 1) + 1;
+            r_term = s_r  * (1-exp(eta)) / (denom * denom) + 1 / denom;
+        } else {
+            r_term = 0;
+        }
+
+       // double ret = exp(eta) * (r_term - l_term) / exp(pob)
+
+        //logged version
+        //double ans = exp(eta + log(r_term - l_term) - pob);
+        
+        double ans = exp(eta) * (r_term - l_term) / exp(pob);
+        return(ans);
+    }
+
     virtual ~icm_po(){};
 };
 

@@ -19,13 +19,15 @@
 #include <Rinternals.h>
 #include <Rmath.h>		
 
+
+#include <iostream>
+#include <fstream>
+
 using namespace std;
 
-#include <cppad/cppad.hpp>
-using CppAD::AD;
 
 #include <TinyAD/Scalar.hh>
-
+#include <TinyAD/ScalarFunction.hh>
 
 #include "icenReg_files/basicUtilities.cpp"
 #include "icenReg_files/ic_par.h"

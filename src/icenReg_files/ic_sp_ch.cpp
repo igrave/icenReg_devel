@@ -127,8 +127,7 @@ void setup_icm(SEXP Rlind, SEXP Rrind, SEXP RCovars, SEXP R_w, SEXP R_strata,
     icm_obj->w.resize(nS);
     icm_obj->intercept.resize(nS);
     icm_obj->covars.resize(nS);
-    icm_obj->adFuns.resize(nS);
-
+    
     int reg_k;
 
     for(int s = 0; s < icm_obj->n_strata; s++){
@@ -326,6 +325,7 @@ void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> 
     }
 }
 
+/*
 void icm_Abst::autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
     int k = baseCH[s].size() - 2;
     d1.resize(k);
@@ -466,7 +466,7 @@ void icm_Abst::autoBaseDervsAll2(int s, vector<double> &d1, vector<double> &d2, 
     }
 }
 
-
+*/
 // TinyAD autodiff: computes partial likelihood for each CH value separately
 
 void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0) {
@@ -525,17 +525,24 @@ void icm_Abst::icm_step_s(int s){
         if (derivMethod == 1) {
             // Use raw numeric derivatives
             numericBaseDervsAllRaw(s, d1, d2, d0);
-        } else if (derivMethod == 2) {
+       // } else if (derivMethod == 2) {
             // Use automatic differentiation
-            autoBaseDervsAll2(s, d1, d2, d0);
-        } else if (derivMethod == 3) {
+       //     autoBaseDervsAll2(s, d1, d2, d0);
+       // } else if (derivMethod == 3) {
             // Use vectorized automatic differentiation
-            autoBaseDervsAll(s, d1, d2, d0);
+       //     autoBaseDervsAll(s, d1, d2, d0);
         } else if (derivMethod == 4) {
             // Use TinyAD for automatic differentiation
             tinyadBaseDervsAllRaw(s, d1, d2, d0);
+        } else if (derivMethod == 11) {
+            // Use raw numeric derivatives
+            numericBaseDervsAllRaw(s, d1, d2, d0);
+        } else if (derivMethod == 14) {
+            // Use TinyAD for automatic differentiation
+            tinyadBaseDervsAllRaw(s, d1, d2, d0);
         } else {
-            Rcpp::Rcout << "Invalid derivation method selected.\n";
+
+            Rcpp::Rcout  << derivMethod << "Invalid derivation method selected.\n";
             return;
         }
      
