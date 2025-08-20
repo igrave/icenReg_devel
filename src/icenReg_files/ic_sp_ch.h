@@ -59,6 +59,7 @@ public:
     //void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
     //void autoBaseDervsAll2(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
     void tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
+    void analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
 
     void update_etas();
 	virtual void stablizeBCH() = 0;
@@ -76,7 +77,9 @@ public:
     virtual double reg_d1_lnk(double ch, double xb, double log_p) = 0;
     virtual double reg_d2_lnk(double ch, double xb, double log_p) = 0;
 
+    // contributions of single observations to the likelihood derivatives wrt baseP and baseCH
     virtual double dllk_dp_i(double s_l, double s_r, double eta, double pob,  bool left, bool right) = 0;
+    virtual vector<double> dllk_dch_i(double ch_l, double ch_r, double eta, double pob, bool left) = 0;
     
     void calcAnalyticRegDervs(Eigen::MatrixXd &hess, Eigen::VectorXd &d1);
     void rawDervs2ActDervs();
@@ -278,6 +281,36 @@ public:
         }
         return(ans);
     }
+
+    vector<double> dllk_dch_i(double ch_l, double ch_r, double eta, double pob, bool left){
+        vector<double> ans(2);
+        double d1, d2;
+        double ech;
+
+        // calculate first derivative
+        if (left) {
+            ech = exp(-ch_l + eta);
+            d1 = (ech * exp(ech)) / exp(pob);
+        } else {
+            ech = exp(-ch_r + eta);
+            if (ch_l == R_NegInf) {
+                d1 = ech;
+            }
+            d1 = -(ech * exp(ech)) / exp(pob);
+        }
+
+        // calculate second derivative
+        if (left) {
+            d2 = -d1 * d1 + d1 * (ech - 1);
+        } else {
+            d2 = - d1 * d1 + d1 * (ech - 1); 
+        }
+
+        ans[0] = d1;
+        ans[1] = d2;
+        return(ans);
+    };
+
 	
     virtual ~icm_ph(){};
 };
@@ -363,6 +396,15 @@ public:
         double ans = exp(eta) * (r_term - l_term) / exp(pob);
         return(ans);
     }
+
+
+    vector<double> dllk_dch_i(double ch_l, double ch_r, double eta, double pob, bool left){
+        vector<double> ans(2);
+        ans[0] = 0.0;
+        ans[1] = 0.0;
+        return(ans);
+    };
+
 
     virtual ~icm_po(){};
 };

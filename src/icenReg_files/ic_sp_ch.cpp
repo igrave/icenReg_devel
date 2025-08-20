@@ -325,148 +325,7 @@ void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> 
     }
 }
 
-/*
-void icm_Abst::autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
-    int k = baseCH[s].size() - 2;
-    d1.resize(k);
-    d2.resize(k);
-    d0.resize(k);
-    // 1. Set up AD variables for all internal baseline hazards
-    std::vector<CppAD::AD<double>> adCH(k);
-    std::vector<double> thisCH(k);
-    for(int i = 0; i < k; ++i) {
-        thisCH[i] = baseCH[s][i + 1];
-        adCH[i] = thisCH[i];
-    }
-    CppAD::Independent(adCH);
 
-    // 2. Build partial likelihood: sum over all observations, using AD variables for internal hazards
-    CppAD::AD<double> llk = 0.0;
-    int n = obs_inf[s].size();
-    for(int i = 0; i < n; ++i) {
-        int l = obs_inf[s][i].l;
-        int r = obs_inf[s][i].r;
-        double eta = etas[s][i];
-        CppAD::AD<double> chl = (l == 0) ? CppAD::AD<double>(baseCH[s][l]) : adCH[l - 1];
-        CppAD::AD<double> chr = (r + 1 == k + 1) ? CppAD::AD<double>(baseCH[s][r + 1]) : adCH[r];
-
-        CppAD::AD<double> l_pob = CppAD::exp(-CppAD::exp(chl + eta));
-        CppAD::AD<double> r_pob = CppAD::exp(-CppAD::exp(chr + eta));
-
-        CppAD::AD<double> zero(0.);
-        CppAD::AD<double> one(1.);
-        CppAD::AD<double> large(1e15);
-        CppAD::AD<double> tiny(1e-16);
-        CppAD::AD<double> small(-1e15);
-
-        CppAD::AD<double> left_part = CppAD::CondExpGt(chl, large, one, l_pob);
-        left_part = CppAD::CondExpLt(chl, small, zero, l_pob);
-
-        CppAD::AD<double> right_part = CppAD::CondExpGt(chr, large, one, r_pob);
-        right_part = CppAD::CondExpLt(chr, small, zero, r_pob);
-
-        CppAD::AD<double> pob = left_part - right_part;
-        // Avoid log(0) or negative pob
-        pob = CppAD::CondExpGt(pob, zero, pob, tiny);
-        llk += CppAD::log(pob) * w[s][i];
-    }
-
-    // 3. Tape and compute derivatives
-    std::vector<CppAD::AD<double>> out(1);
-    out[0] = llk;
-    CppAD::ADFun<double> fun(adCH, out);
-
-    // 4. Get gradient and Hessian diagonal using SparseHessian (modern style)
-    std::vector<double> grad = fun.Jacobian(thisCH);
-
-    std::vector<bool> pattern(k * k, false);
-    for (int i = 0; i < k; ++i) {
-        pattern[i * k + i] = true;
-    }
-    std::vector<double> w_sparse(1, 1.0);
-    std::vector<double> hess_diag = fun.SparseHessian(thisCH, w_sparse, pattern);
-
-    std::vector<double> y = fun.Forward(0, thisCH); // Ensure the function is evaluated at the current point    
-
-    for(int i = 0; i < k; ++i) {
-        d0[i] = CppAD::Value(llk);
-        d1[i] = grad[i];
-        d2[i] = hess_diag[i * k + i];
-        if (std::isnan(d2[i]) || std::isinf(d2[i])) d2[i] = R_NegInf;
-    }
-}
-
-
-// Non-vectorized autodiff: computes partial likelihood for each CH value separately
-void icm_Abst::autoBaseDervsAll2(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0) {
-    int k = baseCH[s].size() - 2;
-    d1.resize(k);
-    d2.resize(k);
-    d0.resize(k);
-
-    if (adFuns[s].size() == 0) {
-        adFuns[s].resize(k);
-        for (int param = 0; param < k; ++param) {
-            // Copy current CH values
-            std::vector<CppAD::AD<double>> adCH(1);
-            std::vector<double> thisCH(1);
-            thisCH[0] = baseCH[s][param + 1];
-            adCH[0] = thisCH[0];
-            CppAD::Independent(adCH);
-
-            // Build partial likelihood for this parameter: sum over affected observations
-            CppAD::AD<double> llk = 0.0;
-            int baseCH_idx = param + 1;
-
-            CppAD::AD<double> zero(0.);
-            CppAD::AD<double> small(1e-16);
-            // Left boundary
-            int num_l = node_inf[s][baseCH_idx].l.size();
-            for (int i = 0; i < num_l; ++i) {
-                int obs = node_inf[s][baseCH_idx].l[i];
-                CppAD::AD<double> chl = adCH[0];
-                double chr = baseCH[s][obs_inf[s][obs].r + 1];
-                double eta = etas[s][obs];
-                CppAD::AD<double> pob = CppAD::exp(-CppAD::exp(chl + eta)) - CppAD::exp(-CppAD::exp(chr + eta));
-                pob = CppAD::CondExpGt(pob, zero, pob, small);
-                llk += CppAD::log(pob) * w[s][obs];
-            }
-            // Right boundary
-            int num_r = node_inf[s][baseCH_idx].r.size();
-            for (int i = 0; i < num_r; ++i) {
-                int obs = node_inf[s][baseCH_idx].r[i];
-                double chl = baseCH[s][obs_inf[s][obs].l];
-                CppAD::AD<double> chr = adCH[0];
-                double eta = etas[s][obs];
-                CppAD::AD<double> pob = CppAD::exp(-CppAD::exp(chl + eta)) - CppAD::exp(-CppAD::exp(chr + eta));
-                pob = CppAD::CondExpGt(pob, zero, pob, small);
-                llk += CppAD::log(pob) * w[s][obs];
-            }
-
-            // Tape and compute derivatives
-            std::vector<CppAD::AD<double>> out(1);
-            out[0] = llk;
-            adFuns[s][param] = CppAD::ADFun<double>(adCH, out);
-            adFuns[s][param].optimize();
-        }
-    } 
-    
-    
-    // just reuse existing ADFuns if available
-    for(int param = 0; param < k; ++param) {
-        std::vector<double> thisCH(1);
-        thisCH[0] = baseCH[s][param + 1];
-        std::vector<double> grad = adFuns[s][param].Jacobian(thisCH);
-        std::vector<double> hess = adFuns[s][param].Hessian(thisCH, std::vector<double>{1.0});
-        std::vector<double> y = adFuns[s][param].Forward(0, thisCH);
-       // d0[param] = y[0];
-        d1[param] = grad[0];
-        d2[param] = hess[0];
-        if (std::isnan(d2[param]) || std::isinf(d2[param])) d2[param] = R_NegInf;
-    }
-}
-
-*/
 // TinyAD autodiff: computes partial likelihood for each CH value separately
 
 void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0) {
@@ -508,6 +367,49 @@ void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector
     }
 }
 
+void icm_Abst::analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
+    int k = baseCH[s].size() - 2;
+    d1.resize(k);
+    d2.resize(k);
+    d0.resize(k);
+    for(int param = 0; param < k; ++param){
+        d1[param] = 0.0;
+        d2[param] = 0.0;
+        d0[param] = 0.0;
+        int baseCH_idx = param + 1;
+
+        // Left boundary
+        int num_l = node_inf[s][baseCH_idx].l.size();
+        for(int i = 0; i < num_l; ++i){
+            int obs = node_inf[s][baseCH_idx].l[i];
+            double chl = baseCH[s][obs_inf[s][obs].l];
+            double chr = baseCH[s][obs_inf[s][obs].r + 1];
+            double eta = etas[s][obs];
+
+            vector<double> derivs(2);
+            derivs = dllk_dch_i(chl, chr, eta, obs_inf[s][obs].pob, true);
+            d1[param] += derivs[0];
+            d2[param] += derivs[1];
+        }
+
+        // Right boundary
+        int num_r = node_inf[s][baseCH_idx].r.size();
+        for(int i = 0; i < num_r; ++i){
+            int obs = node_inf[s][baseCH_idx].r[i];
+            double chl = baseCH[s][obs_inf[s][obs].l];
+            double chr = baseCH[s][obs_inf[s][obs].r + 1];
+            double eta = etas[s][obs];
+            vector<double> derivs(2);
+            derivs = dllk_dch_i(chl, chr, eta, obs_inf[s][obs].pob, false);
+            d1[param] += derivs[0];
+            d2[param] += derivs[1];
+        }
+    }
+}
+
+
+
+
 void icm_Abst::icm_step(){
     for(int s = 0; s < n_strata; s++){
         icm_step_s(s);
@@ -525,9 +427,9 @@ void icm_Abst::icm_step_s(int s){
         if (derivMethod == 1) {
             // Use raw numeric derivatives
             numericBaseDervsAllRaw(s, d1, d2, d0);
-       // } else if (derivMethod == 2) {
-            // Use automatic differentiation
-       //     autoBaseDervsAll2(s, d1, d2, d0);
+        } else if (derivMethod == 2) {
+         // Use raw numeric derivatives
+            numericBaseDervsAllRaw(s, d1, d2, d0);
        // } else if (derivMethod == 3) {
             // Use vectorized automatic differentiation
        //     autoBaseDervsAll(s, d1, d2, d0);
@@ -540,6 +442,9 @@ void icm_Abst::icm_step_s(int s){
         } else if (derivMethod == 14) {
             // Use TinyAD for automatic differentiation
             tinyadBaseDervsAllRaw(s, d1, d2, d0);
+        } else if (derivMethod == 12) {
+            // Use analytical differentiation
+            analytical_dobs_dch(s, d1, d2, d0);
         } else {
 
             Rcpp::Rcout  << derivMethod << "Invalid derivation method selected.\n";
