@@ -310,29 +310,27 @@ void icm_Abst::numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> 
     }
 }
 
-void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
+void icm_Abst::numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2){
     int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
-    d0.resize(k);
-    double llk_full = sum_llk(s);
+    
     vector<double> ind_dervs(3);
     for(int i = 0; i < k; i++){
         numericBaseDervsOne(s, i + 1, ind_dervs);
         d1[i] = ind_dervs[0];
         d2[i] = ind_dervs[1];
-        d0[i] = ind_dervs[2];
+        
     }
 }
 
 
 // TinyAD autodiff: computes partial likelihood for each CH value separately
 
-void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0) {
+void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2) {
     int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
-    d0.resize(k);
     for (int param = 0; param < k; ++param) {
         using ADouble = TinyAD::Double<1>;
 
@@ -361,21 +359,20 @@ void icm_Abst::tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector
             llk += log(pob) * w[s][obs];
         }
             
-        d0[param] = llk.val;
         d1[param] = llk.grad(0);
         d2[param] = llk.Hess(0,0);
     }
 }
 
-void icm_Abst::analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0){
+void icm_Abst::analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2){
     int k = baseCH[s].size() - 2;
     d1.resize(k);
     d2.resize(k);
-    d0.resize(k);
+
     for(int param = 0; param < k; ++param){
         d1[param] = 0.0;
         d2[param] = 0.0;
-        d0[param] = 0.0;
+        
         int baseCH_idx = param + 1;
 
         // Left boundary
@@ -401,6 +398,7 @@ void icm_Abst::analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2
             double eta = etas[s][obs];
             vector<double> derivs(2);
             derivs = dllk_dch_i(chl, chr, eta, obs_inf[s][obs].pob, false);
+            
             d1[param] += derivs[0];
             d2[param] += derivs[1];
         }
@@ -422,35 +420,48 @@ void icm_Abst::icm_step_s(int s){
         
         vector<double> d1;
         vector<double> d2;
-        vector<double> d0;
 
         if (derivMethod == 1) {
             // Use raw numeric derivatives
-            numericBaseDervsAllRaw(s, d1, d2, d0);
+            numericBaseDervsAllRaw(s, d1, d2);
         } else if (derivMethod == 2) {
          // Use raw numeric derivatives
-            numericBaseDervsAllRaw(s, d1, d2, d0);
+            analytical_dobs_dch(s, d1, d2);
        // } else if (derivMethod == 3) {
             // Use vectorized automatic differentiation
-       //     autoBaseDervsAll(s, d1, d2, d0);
+       //     autoBaseDervsAll(s, d1, d2);
         } else if (derivMethod == 4) {
             // Use TinyAD for automatic differentiation
-            tinyadBaseDervsAllRaw(s, d1, d2, d0);
+            tinyadBaseDervsAllRaw(s, d1, d2);
         } else if (derivMethod == 11) {
             // Use raw numeric derivatives
-            numericBaseDervsAllRaw(s, d1, d2, d0);
+            numericBaseDervsAllRaw(s, d1, d2);
         } else if (derivMethod == 14) {
             // Use TinyAD for automatic differentiation
-            tinyadBaseDervsAllRaw(s, d1, d2, d0);
+            tinyadBaseDervsAllRaw(s, d1, d2);
         } else if (derivMethod == 12) {
             // Use analytical differentiation
-            analytical_dobs_dch(s, d1, d2, d0);
+            analytical_dobs_dch(s, d1, d2);
         } else {
 
             Rcpp::Rcout  << derivMethod << "Invalid derivation method selected.\n";
             return;
         }
      
+
+        std::ofstream myfile; // added "std::"
+        myfile.open("dch.csv", std::ios::app); // append mode
+        myfile << "Index,d1,d2\n";
+        for (int i = 0; i < d1.size(); i++) {
+            myfile << i << ",";
+            myfile << std::setprecision(8) << std::fixed << d1[i];
+            myfile << ",";
+            myfile << std::setprecision(8) << std::fixed << d2[i];
+            myfile << "\n";
+        }
+        myfile.close();
+
+
         int thisSize = d1.size();
 
 

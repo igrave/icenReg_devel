@@ -484,17 +484,17 @@ void icm_Abst::numeric_dobs_dp(int s, bool forGA){
     	}
     }
     
-    std::ofstream myfile; // added "std::"
-    myfile.open("numeric.csv", std::ios::app); // append mode
-    myfile << "Index,RightOnly,Both\n";
-    for (int i = 0; i < n; i++) {
-        myfile << i << ",";
-        myfile << std::setprecision(8) << std::fixed << dob_dp_rightOnly[s][i];
-        myfile << ",";
-        myfile << std::setprecision(8) << std::fixed << dob_dp_both[s][i];
-        myfile << "\n";
-    }
-    myfile.close();
+    // std::ofstream myfile; // added "std::"
+    // myfile.open("numeric.csv", std::ios::app); // append mode
+    // myfile << "Index,RightOnly,Both\n";
+    // for (int i = 0; i < n; i++) {
+    //     myfile << i << ",";
+    //     myfile << std::setprecision(8) << std::fixed << dob_dp_rightOnly[s][i];
+    //     myfile << ",";
+    //     myfile << std::setprecision(8) << std::fixed << dob_dp_both[s][i];
+    //     myfile << "\n";
+    // }
+    // myfile.close();
 
     base_p_derv[s].resize(k);
 	
@@ -540,11 +540,11 @@ void icm_Abst::analytical_dobs_dp(int s){
         base_p_derv[s][j] = 0;
     }
 
-    std::ofstream myfile; // added "std::"
+    // std::ofstream myfile; // added "std::"
     
-    myfile.open("analytic.csv", std::ios::app); // append mode
-    // myfile << "Index,right,both,left\n";
-    myfile << "Index,RightOnly,Both\n";
+    // myfile.open("analytic.csv", std::ios::app); // append mode
+    // // myfile << "Index,right,both,left\n";
+    // myfile << "Index,RightOnly,Both\n";
     
     
     for (int i = 0; i < n; i++) {
@@ -563,25 +563,25 @@ void icm_Abst::analytical_dobs_dp(int s){
                 
         if (lind > 0 && rind < k) {
             // both sides could contribute
-            Both[i] = dllk_dp_i(sl, sr, eta, pob, true, true) * w[s][i];
+            Both[i] = dllk_dp_i(sl, sr, eta, pob, true, true);
         } 
         if (lind > 0 && rind == k) {
             // we could have left only contribution
             // left_only = dllk_dp_i(sl, sr, eta, pob, true, false) * w[s][i];
-            Both[i] = dllk_dp_i(sl, sr, eta, pob, true, false) * w[s][i];
+            Both[i] = dllk_dp_i(sl, sr, eta, pob, true, false);
         }
         if (rind < k) {
             //  right side only contribution
-            RightOnly[i] = dllk_dp_i(sl, sr, eta, pob, false, true) * w[s][i];
+            RightOnly[i] = dllk_dp_i(sl, sr, eta, pob, false, true);
         }
         
-        myfile << i << ",";
-        myfile << std::setprecision(8) << std::fixed << RightOnly[i];
-        myfile << ",";
-        myfile << std::setprecision(8) << std::fixed << Both[i];
+        // myfile << i << ",";
+        // myfile << std::setprecision(8) << std::fixed << RightOnly[i];
         // myfile << ",";
-        // myfile << std::setprecision(8) << std::fixed << left_only;
-        myfile << "\n";
+        // myfile << std::setprecision(8) << std::fixed << Both[i];
+        // // myfile << ",";
+        // // myfile << std::setprecision(8) << std::fixed << left_only;
+        // myfile << "\n";
 
        /*
         Possibilities:
@@ -625,7 +625,7 @@ void icm_Abst::analytical_dobs_dp(int s){
         // }
     }
     
-    myfile.close();
+    // myfile.close();
 
     base_p_derv[s].resize(k);
 	
@@ -655,110 +655,3 @@ void icm_Abst::analytical_dobs_dp(int s){
 
     
 }
-/*
-template <typename T> T icm_Abst::objective(const Eigen::Vector<T, k>& p)
-{
-    T  llk = 0.0;
-    int k = p.size();
-    Eigen::Vector<ADouble> S(k + 1);
-    vector<ADouble> CH(k);
-    // Set up TinyAD active variables for all baseline probabilities
-
-    // set up S
-    S[0] = 1.0;
-    for(int i = 1; i < k; i++){
-        S[i] = S[i-1] - p[i-1];
-    }
-    S[k] = 0.0;
-
-    // Set up CH
-    CH[0] = R_NegInf;
-    CH[k-1] = R_PosInf;
-    for(int i = 1; i < (k-1); i++){
-        CH[i] = log(-log(S[i]));
-    }
-    int n = etas[s].size();
-    for (int i = 0; i < n; ++i) {
-        ADouble chr = CH[obs_inf[s][i].r + 1];
-        ADouble chl = CH[obs_inf[s][i].l];
-        double eta = etas[s][i];
-        ADouble pob = exp(-exp(chl + eta)) - exp(-exp(chr + eta));
-        if (pob < 1e-16)  pob = 1e-16; // Avoid log(0) 
-        llk += log(pob) * w[s][i];
-    }
-
-// Compute optimal triangulation w.r.t. current x
-Eigen::MatrixXi F = optimal_triangulation(_x);
- // Compute objective value w.r.t. optimal triangulation
- T f = 0.0;
- for (int i = 0; i < (int)F.rows(); ++i)
- f += triangle_distortion(_x, F(i, 0), F(i, 1), F(i, 2));
- f += penalty(_x);
-
- return f;
- }
-
-*/
-/*
-void icm_Abst::auto_base_p_derv(int s) {
-    std::vector<double> old_baseP = baseP[s];
-    int k = baseP[s].size();
-
-    // Convert baseP[s] to Eigen::VectorXd for TinyAD
-    Eigen::VectorXd p0 = Eigen::Map<Eigen::VectorXd>(baseP[s].data(), k);
-
-    // Set up a scalar function with k variables (one per baseline probability)
-    auto func = TinyAD::scalar_function<1>(p0);
-
-    // Add the log-likelihood as a single element covering all variables
-    func.add_elements<1>(std::vector<int>{0}, [&](auto& element) {
-        // Element is evaluated with either double or TinyAD::Double
-        using T = TINYAD_SCALAR_TYPE(element);
-
-        // Get all variable values
-        std::vector<T> p(k);
-        for (int i = 0; i < k; ++i) {
-            p[i] = element.variables(i)(0);
-        }
-
-        // Compute S vector
-        std::vector<T> S(k + 1);
-        S[0] = T(1.0);
-        for (int i = 1; i < k; ++i) {
-            S[i] = S[i-1] - p[i-1];
-        }
-        S[k] = T(0.0);
-
-        // Compute CH vector
-        std::vector<T> CH(k);
-        CH[0] = T(R_NegInf);
-        CH[k-1] = T(R_PosInf);
-        for (int i = 1; i < (k-1); ++i) {
-            CH[i] = log(-log(S[i]));
-        }
-
-        // Compute log-likelihood
-        T llk = T(0.0);
-        int n = etas[s].size();
-        for (int i = 0; i < n; ++i) {
-            T chr = CH[obs_inf[s][i].r + 1];
-            T chl = CH[obs_inf[s][i].l];
-            double eta = etas[s][i];
-            T pob = exp(-exp(chl + eta)) - exp(-exp(chr + eta));
-            if (pob < T(1e-16)) pob = T(1e-16);
-            llk += log(pob) * w[s][i];
-        }
-        return llk;
-    });
-
-    // Evaluate with gradient
-    auto [f, g] = func.eval_with_gradient(p0);
-
-    base_p_derv[s].resize(k);
-    for (int j = 0; j < k; ++j) {
-        base_p_derv[s][j] = g(j);
-    }
-
-    baseP[s] = old_baseP; // restore
-}
-*/

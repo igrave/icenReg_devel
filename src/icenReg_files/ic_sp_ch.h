@@ -50,16 +50,14 @@ public:
     vector<vector<obInf>> obs_inf;
     vector<vector<node_info>> node_inf;
     
-    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
+    void numericBaseDervsAllRaw(int s, vector<double> &d1, vector<double> &d2);
     
     void icm_addPar(int s, vector<double> &delta);
 
     void numericBaseDervsOne(int s, int raw_ind, vector<double> &d);
     void numericBaseDervsAllAct(int s, vector<double> &d1, vector<double> &d2);
-    //void autoBaseDervsAll(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
-    //void autoBaseDervsAll2(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
-    void tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2, std::vector<double> &d0);
-    void analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2, vector<double> &d0);
+    void tinyadBaseDervsAllRaw(int s, std::vector<double> &d1, std::vector<double> &d2);
+    void analytical_dobs_dch(int s, vector<double> &d1, vector<double> &d2);
 
     void update_etas();
 	virtual void stablizeBCH() = 0;
@@ -286,25 +284,29 @@ public:
         vector<double> ans(2);
         double d1, d2;
         double ech;
+        //double echl, echr;
 
         // calculate first derivative
+        // echl = exp(ch_l + eta);
+        // echr = exp(ch_r + eta);
         if (left) {
-            ech = exp(-ch_l + eta);
-            d1 = (ech * exp(ech)) / exp(pob);
+            ech = exp(ch_l + eta);
+            d1 = -(ech * exp(-ech)) / pob;
         } else {
-            ech = exp(-ch_r + eta);
+            ech = exp(ch_r + eta);
             if (ch_l == R_NegInf) {
-                d1 = ech;
+               d1 = ech;
             }
-            d1 = -(ech * exp(ech)) / exp(pob);
+            d1 = (ech * exp(-ech)) / pob;
         }
 
         // calculate second derivative
-        if (left) {
-            d2 = -d1 * d1 + d1 * (ech - 1);
-        } else {
-            d2 = - d1 * d1 + d1 * (ech - 1); 
-        }
+        d2 = d1 * (1 - ech) - d1 * d1;
+        // if (left) {
+        //     d2 = d1 * (1 - echl) - d1 * d1;
+        // } else {
+        //     d2 = d1 * (1 - echr) - d1 * d1; 
+        // }
 
         ans[0] = d1;
         ans[1] = d2;
