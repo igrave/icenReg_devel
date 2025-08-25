@@ -284,29 +284,21 @@ public:
         vector<double> ans(2);
         double d1, d2;
         double ech;
-        //double echl, echr;
 
-        // calculate first derivative
-        // echl = exp(ch_l + eta);
-        // echr = exp(ch_r + eta);
         if (left) {
             ech = exp(ch_l + eta);
-            d1 = -(ech * exp(-ech)) / pob;
+            if (ch_r == R_PosInf) {
+               d1 = -ech;
+               d2 = d1;
+            } else {
+                d1 = -(ech * exp(-ech)) / pob;
+                d2 = d1 * (1 - ech) - d1 * d1;
+            }
         } else {
             ech = exp(ch_r + eta);
-            if (ch_l == R_NegInf) {
-               d1 = ech;
-            }
             d1 = (ech * exp(-ech)) / pob;
+            d2 = d1 * (1 - ech) - d1 * d1;
         }
-
-        // calculate second derivative
-        d2 = d1 * (1 - ech) - d1 * d1;
-        // if (left) {
-        //     d2 = d1 * (1 - echl) - d1 * d1;
-        // } else {
-        //     d2 = d1 * (1 - echr) - d1 * d1; 
-        // }
 
         ans[0] = d1;
         ans[1] = d2;
