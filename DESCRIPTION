@@ -7,11 +7,14 @@ Author: Clifford Anderson-Bergman
 Depends:
     survival,
     Rcpp,
-    coda
+    coda,
+    R (>= 3.5)
 Imports:
     foreach,
+    graphics,
     methods,
-    MLEcens
+    MLEcens,
+    stats
 LinkingTo: Rcpp,
     RcppEigen
 Maintainer: Clifford Anderson-Bergman <pistacliffcho@gmail.com>
@@ -21,8 +24,9 @@ Description: Regression models for interval censored data. Currently supports
     time models) and Bayesian parametric models. Includes functions for easy visual
     diagnostics of model fits and imputation of censored data.
 License: LGPL (>= 2.0, < 3)
-Packaged: 2014-08-20 19:43:34 UTC; cliff
-RoxygenNote: 7.3.2
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3

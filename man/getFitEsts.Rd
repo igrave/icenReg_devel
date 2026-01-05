@@ -4,7 +4,7 @@
 \alias{getFitEsts}
 \title{Get Survival Curve Estimates from icenReg Model}
 \usage{
-getFitEsts(fit, newdata, p, q)
+getFitEsts(fit, newdata = NULL, p, q)
 }
 \arguments{
 \item{fit}{model fit with \code{ic_par} or \code{ic_sp}}

@@ -1,5 +1,7 @@
-
+#' @exportS3Method vcov icenReg_fit
 vcov.icenReg_fit <- function(object,...) object$var
+
+#' @exportS3Method names icenReg_fit
 names.icenReg_fit <- function(x) ls(x)
 
 #' Get Estimated Survival Curves from Semi-parametric Model for Interval Censored Data
@@ -26,7 +28,12 @@ names.icenReg_fit <- function(x) ls(x)
 #' be provided to newdata, which will result in multiple S_curves. 
 #' @author Clifford Anderson-Bergman
 #' @export
-getSCurves <- function(fit, newdata = NULL){
+getSCurves<- function(fit, newdata = NULL){
+	UseMethod('getSCurves', fit)
+}
+
+#' @exportS3Method getSCurves default
+getSCurves.default <- function(fit, newdata = NULL){
 	if(inherits(fit, 'impute_par_icph'))	stop('getSCurves currently not supported for imputation model')
 	if(inherits(fit, 'ic_par'))				stop('getSCurves does not support ic_par objects. Use getFitEsts() instead. See ?getFitEsts')
 	etas <- get_etas(fit, newdata)
@@ -59,14 +66,45 @@ getSCurves <- function(fit, newdata = NULL){
 	}
 }
 
+#' @exportS3Method range sp_curves_list
+range.sp_curves_list <- function(..., na.rm = FALSE, finite = FALSE) {
+  x <- unlist(list(...), recursive = FALSE)
+  range(sapply(x, function(x) x$Tbull_ints), na.rm = na.rm, finite = finite)
+}
+
+#' @exportS3Method getSCurves ic_np
+getSCurves.ic_np <- function(fit, newdata = NULL) {
+  etas <- c(baseline = 1)
+	grpNames <- names(etas)
+	transFxn <- get_link_fun(fit)
+  
+  x_l <- fit$T_bull_Intervals[1,]
+	x_u <- fit$T_bull_Intervals[2,]
+	x_l <- c(x_l[1], x_l)
+	x_u <- c(x_l[1], x_u)
+	Tbull_intervals <- cbind(x_l,  x_u)
+	colnames(Tbull_intervals) <- c('lower', 'upper')
+	s <- 1 - c(0, cumsum(fit$p_hat))
+	ans <- list(Tbull_ints = Tbull_intervals, "S_curves" = list())
+		
+	for(i in 1:length(etas)){
+	  eta <- etas[i]
+	  ans[["S_curves"]][[grpNames[i] ]] <- transFxn(s, eta)
+	}
+	class(ans) <- 'sp_curves'
+  ans  
+}
 
 
-
-summary.icenReg_fit <- function(object,...)
-	new('icenRegSummary', object)
-summary.ic_npList <- function(object, ...)
+#' @exportS3Method summary icenReg_fit
+summary.icenReg_fit <- function(object,...) {
+  new('icenRegSummary', object)
+}
+	
+#' @exportS3Method summary ic_npList
+summary.ic_npList <- function(object, ...) {
   object
-
+}
 	
 #' Simulates interval censored data from regression model with a Weibull baseline
 #' 
@@ -349,9 +387,8 @@ diag_covar <- function(object, varName,
 	allY <- numeric()
 	fitNames <- ls(spltFits)
 	for(nm in fitNames){
-		allX <- c(allX, as.numeric(spltFits[[nm]]$T_bull_Intervals) )
+		allX <- c(allX, unlist(spltFits[[nm]]$T_bull_Intervals) )
 	}
-	
 	xlim <- range(allX, na.rm = TRUE, finite = TRUE)
 	ylim <- sort( s_trans(c(0.025, 0.975)) )
 	
@@ -502,7 +539,8 @@ getFitEsts <- function(fit, newdata = NULL, p, q){
   
   if(inherits(fit, 'sp_fit'))	{
     scurves <- getSCurves(fit, newdata = NULL)
-    baselineInfo <- list(tb_ints = scurves$Tbull_ints, s = scurves$S_curves$baseline)
+    if (length(scurves) > 1) stop("Models with stratification factors are not supported")
+    baselineInfo <- list(tb_ints = scurves[[1]]$Tbull_ints, s = scurves[[1]]$S_curves$baseline)
     baseMod = 'sp'
   }
   if(inherits(fit, 'par_fit') | inherits(fit, 'bayes_fit')){	
@@ -588,7 +626,7 @@ diag_baseline <- function(object, data, model = 'ph', weights = NULL,
 
 	sp_fit <- ic_sp(formula, data = sp_data, bs_samples = 0, model = model)
 	plot(sp_fit, newdata)
-	xrange <- range(getSCurves(sp_fit)$Tbull_ints, finite = TRUE)
+	xrange <- range(getSCurves(sp_fit), finite = TRUE)
 	grid <- xrange[1] + 0:100/100 *(xrange[2] - xrange[1])
 	if(is.null(cols)) cols <- 1 + 1:length(dists)
 	for(i in seq_along(dists)){
@@ -990,7 +1028,7 @@ dGeneralGamma <- function(x, mu, s, Q){
   s <- updateDistPars(s, max_n)
   Q <- updateDistPars(Q, max_n)
   
-  ans <- .Call('dGeneralGamma', x, mu, s, Q)
+  ans <- .Call('dGeneralGamma', x, mu, s, Q, PACKAGE = "icenReg")
   return(ans)
 }
 
@@ -1124,3 +1162,4 @@ survCIs <- function(fit, newdata = NULL,
   return(ans)
 }
 
+  
